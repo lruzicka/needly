@@ -595,14 +595,15 @@ class Application:
 
         # Get the domain names from the kvm hypervisor
         try:
-            self.kvm = libvirt.open(None)
+            self.kvm = libvirt.open("qemu:///session")
+            # Get the names of all running domains in the hypervisor.
+            domains = [x.name() for x in self.kvm.listAllDomains()]
+            if len(domains) == 0:
+                messagebox.showerror("No domains found", "Either the hypervisor is not running or no VMs available in the qemu:///session.")
+            self.cd_choose_box['values'] = domains
         except libvirt.libvirtError:
-            messagebox.showerror("Failed to open connection to the hypervisor.")
-        # Get the names of all running domains in the hypervisor.
-        domains = [x.name() for x in self.kvm.listAllDomains()]
-        if len(domains) == 0:
-            messagebox.showerror("No domains found", "If there is a running VM, it may not be running in the user profile. Either run in the user profile or run the application with correct privileges.")
-        self.cd_choose_box['values'] = domains
+            messagebox.showerror("Error", "Failed to open connection to the hypervisor.")
+            self.cd_choose_box['values'] = []
 
     def connect(self, event=None):
         """ Update the status variable to let the application know about the VM. """
