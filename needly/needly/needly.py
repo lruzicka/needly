@@ -7,11 +7,12 @@ Created on Fri May 18 08:46:48 2018
 """
 
 import tkinter as tk
+import io
 import os
 import json
 import re
 import sys
-import subprocess
+import libvirt
 from tkinter import ttk
 from tkinter import filedialog, messagebox
 from PIL import Image
@@ -50,6 +51,7 @@ class Application:
         self.handler = None # The file reader and writer object
         self.imageCount = 0 # Counter for
         self.rectangles = [] # Holder for rectangles
+        self.kvm = None # Connection to KVM hypervisor
         self.virtual_machine = None # Holds the name of the connected virtual machine
 
     def create_menu(self):
@@ -114,7 +116,7 @@ class Application:
         self.yscroll = tk.Scrollbar(self.picFrame, orient='vertical')
         self.yscroll.grid(row=0, column=1, columnspan=2, sticky="ns")
 
-        self.pictureField = tk.Canvas(self.picFrame, height=800, width=1200, xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set)
+        self.pictureField = tk.Canvas(self.picFrame, height=769, width=1025, xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set)
         self.pictureField.grid(row=0, column=0)
         self.pictureField.config(scrollregion=self.pictureField.bbox('ALL'))
         # Bind picture specific keys
@@ -585,33 +587,21 @@ class Application:
         self.cd_label = tk.Label(self.cd_layout, text='Choose a VM:', padx=10, pady=5)
         self.cd_label.grid(row=0, column=0)
         self.connect_dialogue.bind("<Return>", self.connect)
-
-        # Get the domain names from the external application (virsh)
-        run = subprocess.run(['virsh', 'list'], capture_output=True)
-        domains = []
-        # If the virsh command fails, tell us about it.
-        if run.returncode != 0:
-            messagebox.showerror("Error", run.stderr.decode('utf-8'))
-        # Otherwise, handle the command output to get a list of
-        # running and available virtual machines.
-        else:
-            output = run.stdout.decode('utf-8').split('\n')
-            doms = output[2:]
-            for line in doms:
-                try:
-                    d = re.split("\s+", line)
-                    d = d[2].strip()
-                    domains.append(d)                    
-                except IndexError:
-                    break
-        if len(domains) == 0:
-            messagebox.showerror("No domains found", "If there is a running VM, it may not be running in the user profile. Either run in the user profile or run the application with correct privileges.")
-        # Put the domain names into the Combobox widget to allow to select one of them.
         choices = tk.StringVar()
         self.cd_choose_box = ttk.Combobox(self.cd_layout, textvariable=choices, height=3)
         self.cd_choose_box.grid(row=0, column=1)
         self.cd_connect = tk.Button(self.cd_layout, text="Connect", width=10, command=self.connect)
         self.cd_connect.grid(row=1, column=1)
+
+        # Get the domain names from the kvm hypervisor
+        try:
+            self.kvm = libvirt.open(None)
+        except libvirt.libvirtError:
+            messagebox.showerror("Failed to open connection to the hypervisor.")
+        # Get the names of all running domains in the hypervisor.
+        domains = [x.name() for x in self.kvm.listAllDomains()]
+        if len(domains) == 0:
+            messagebox.showerror("No domains found", "If there is a running VM, it may not be running in the user profile. Either run in the user profile or run the application with correct privileges.")
         self.cd_choose_box['values'] = domains
 
     def connect(self, event=None):
@@ -629,30 +619,40 @@ class Application:
         """ Take the screenshot from the running virtual machine. As only .ppm files
         are possible, use imagemagick to convert the shot into a .png file and save
         it. """
-        # When no VM is available for taking shots (the VM is not connected)
+        # When no VM has been previously selected, there is no need 
+        # to try and take screenshots.
         if not self.virtual_machine:
             messagebox.showerror("No VM connected", "Connect a VM before you try taking screenshots from it. Use the CTRL-V key shortcut.")
-        # Else do take the shot.
+        # We have the running domain connected, so let's take the shot.
         else:
+            # Use the domain name to get the domain object
             domain = self.virtual_machine
-            shot = subprocess.run(['virsh', 'screenshot', domain, 'screenshot.ppm'], capture_output=True)
-            if shot.returncode == 0:
-                convert = subprocess.run(['convert', 'screenshot.ppm', 'screenshot.png'], capture_output=True)
-                if convert.returncode != 0:
-                    messagebox.showerror("Conversion failed", f"Could not convert the ppm file into the target format.")   
-                delete = subprocess.run(['rm', '-f', 'screenshot.ppm'], capture_output=True)
-                if delete.returncode != 0:
-                    messagebox.showerror("Deletion failed", "Could not delete the temporary file.")   
-                path = os.path.join(os.path.abspath('.'), 'screenshot.png')
-                self.imageName = 'screenshot.png'
-                self.imageCount = 0
-                self.displayImage(path)
-                self.textField.delete("1.0", "end")
-                self.textField.insert("end", self.imageName)
-            
-            else:
-                messagebox.showerror("Error", f"The screen shot was not taken!\n{shot.stderr.decode('utf-8')}")
-            
+            domain = self.kvm.lookupByName(domain)
+            # Create a stream to the hypervisor
+            stream = self.kvm.newStream()
+            # Collect the available image type of the first screen
+            # On a VM usually only one screen is available, 
+            # so we will take the first one and will not bother
+            # about others.
+            image_type = domain.screenshot(stream, 0)
+            # The stream will be caught in an envelope
+            image_data = io.BytesIO()
+            # Now, let's take the data from the stream
+            part_stream = stream.recv(8192)
+            while part_stream != b'':
+                image_data.write(part_stream)
+                part_stream = stream.recv(8192)
+            # Convert and save the image
+            image_data.seek(0)
+            image = Image.open(image_data)
+            image.save("screenshot.png", 'PNG')
+            image_data.close()
+            stream.finish()
+            path = os.path.join(os.path.abspath('.'), 'screenshot.png')
+            self.imageName = "screenshot.png"
+            self.displayImage(path)
+            self.textField.delete("1.0", "end")
+            self.textField.insert("end", self.imageName)
 
 #-----------------------------------------------------------------------------------------------
 
@@ -767,20 +767,20 @@ class needleData:
         return len(self.areas)
 
 
-def main():
-    """ Main application method. """
+#-----------------------------------------------------------------------------------------------
 
-    try:
-        path = sys.argv[1]
-    except IndexError:
-        path = None
-        
-    app = Application()
-    
-    if path != None:
-        app.acceptCliChoice(path)
-    
-    app.run()
+#root = tk.Tk()
+#root.title("Python Needle Editor for OpenQA (Version 2)")
 
-if __name__ == '__main__':
-    main()
+try:
+    path = sys.argv[1]
+except IndexError:
+    path = None
+    
+app = Application()
+
+if path != None:
+    app.acceptCliChoice(path)
+
+app.run()
+

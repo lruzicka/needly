@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "needly"
-version = "2.5.2"
+version = "2.5.3"
 description = "Python Needle Editor for openQA"
 authors = ["Lukáš Růžička <lruzicka@redhat.com>"]
 license = "GPLv3"
