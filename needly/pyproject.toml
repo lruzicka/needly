@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "needly"
-version = "2.5.4"
+version = "2.5.5"
 description = "Python Needle Editor for openQA"
 authors = ["Lukáš Růžička <lruzicka@redhat.com>"]
 license = "GPLv3"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.9"
 Pillow = "^9.0.1"
 
 [tool.poetry.dev-dependencies]
