@@ -96,10 +96,32 @@ class Application:
         """Opens an image for editing when passed as a CLI argument upon starting the editor."""
         self.directory = os.path.dirname(path)
         image = os.path.basename(path)
+        # If a json file is opened, we assume that we want to load the needle automatically
+        # and that the needle exists, there we will open and load the needle file.
         if '.json' in image:
             prefix = image.split('.')[0]
             image = prefix + '.png'
-        self.imageName = image    
+            self.imageName = image
+            self.loadNeedle()
+        else:
+            # If however, we start the application with the PNG file, the json needle file
+            # might not exist, therefore we need to perform a test first, before we try to load
+            # it. 
+            # If the test fails, we will at least set the tag from the filename
+            # to save users some time to type. Users can edit it, later and change the file name
+            # from within the application.
+            self.imageName = image
+            jfile = os.path.join(self.directory, self.imageName)
+            # Let's replace the suffix and test if the file exists.
+            pre = jfile.split('.')[0]
+            exists = os.path.exists(f"{pre}.json")
+            # Load the needle if it exists
+            if exists:
+                self.loadNeedle()
+            else:
+                # Or just prefill the tag field from the file name.
+                tag = self.imageName.split('.')[0]
+                self.textField.insert("end", tag)
         self.imageCount = 0
         path = os.path.join(self.directory, self.imageName)
         self.displayImage(path)
@@ -577,7 +599,11 @@ class Application:
         """ Rename the needle PNG file with the top placed tag. """
         tags = self.textField.get("1.0", "end-1c").split("\n")
         future_name = tags[0]
-        if future_name and self.imageName:
+        if not future_name and self.imageName:
+            current = self.returnPath(self.imageName)
+            tag = self.imageName.split('.')[0]
+            self.textField.insert("end", tag)
+        elif future_name and self.imageName:
             future_name = f"{future_name}.png"
             current = self.returnPath(self.imageName)
             new = os.path.join(self.directory, future_name)
