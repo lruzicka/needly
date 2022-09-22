@@ -194,29 +194,29 @@ class Application:
         self.typeList = tk.Spinbox(self.jsonFrame, values=["match","ocr","exclude"])
         self.typeList.grid(row=7, column=0, sticky="ew")
         
-        self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
-        self.textLabel.grid(row=8, column=0, sticky="w")
-        
-        self.textField = tk.Text(self.jsonFrame, width=30, height=3)
-        self.textField.grid(row=9, column=0, sticky="ew")
-        
-        self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
-        self.jsonLabel.grid(row=10, column=0, sticky="w")
-        
-        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
-        self.textJson.grid(row=11, column=0, sticky="ew")
-
-        self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
-        self.needleLabel.grid(row=12, column=0, sticky="w")
-
-        self.needleEntry = tk.Entry(self.jsonFrame, width=30)
-        self.needleEntry.grid(row=13, column=0, sticky="ew")
-
         self.matchLabel = tk.Label(self.jsonFrame, text="Match level:")
-        self.matchLabel.grid(row=14, column=0, sticky="w")
+        self.matchLabel.grid(row=8, column=0, sticky="w")
 
         self.matchEntry = tk.Entry(self.jsonFrame, width=30)
-        self.matchEntry.grid(row=15, column=0, sticky="ew")
+        self.matchEntry.grid(row=9, column=0, sticky="ew")
+
+        self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
+        self.textLabel.grid(row=10, column=0, sticky="w")
+        
+        self.textField = tk.Text(self.jsonFrame, width=30, height=3)
+        self.textField.grid(row=11, column=0, sticky="ew")
+        
+        self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
+        self.jsonLabel.grid(row=12, column=0, sticky="w")
+        
+        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
+        self.textJson.grid(row=13, column=0, sticky="ew")
+
+        self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
+        self.needleLabel.grid(row=14, column=0, sticky="w")
+
+        self.needleEntry = tk.Entry(self.jsonFrame, width=30)
+        self.needleEntry.grid(row=15, column=0, sticky="ew")
 
         self.vmLabel = tk.Label(self.jsonFrame, text="VM connection:")
         self.vmLabel.grid(row=16, column=0, sticky="w")
@@ -357,11 +357,20 @@ class Application:
         try:
             self.needleCoordinates = [self.area[0], self.area[1], self.area[2], self.area[3]]
             typ = self.area[4]
+            # Some needles do not have matches defined, so we must be very careful with this.
+            try:
+                match = self.area[5]
+            except IndexError:
+                match = None
+                
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
             self.rectangles.append(self.rectangle)
             self.displayCoordinates(self.needleCoordinates)
             self.typeList.delete(0, "end")
             self.typeList.insert("end", typ)
+            if match:
+                self.matchEntry.delete(0, "end")
+                self.matchEntry.insert("end", match)
         except TypeError:
             for r in self.rectangles:
                 self.pictureField.delete(r)
@@ -391,6 +400,7 @@ class Application:
         apos = self.needleCoordinates[2]
         bpos = self.needleCoordinates[3]
         typ = self.typeList.get()
+        match = self.matchEntry.get()
         props = self.propText.get("1.0", "end-1c")
         if "\n" in props:
             props = props.split("\n")
@@ -401,7 +411,11 @@ class Application:
             tags = tags.split("\n")
         if tags == "":
             tags = []
-        coordinates = [xpos, ypos, apos, bpos, typ]
+        # Do not force match onto needle json when not defined
+        if match:
+            coordinates = [xpos, ypos, apos, bpos, typ, match]
+        else:
+            coordinates = [xpos, ypos, apos, bpos, typ]
         self.needle.update(coordinates, tags, props)
         self.textJson.delete("1.0", "end")
         json = self.needle.provideJson()
@@ -527,7 +541,6 @@ class Application:
             self.handler = fileHandler(jsonfile)
             self.handler.readFile()
             jsondata = self.handler.provideData()
-
             self.needle = needleData(jsondata)
             properties = self.needle.provideProperties()
             self.propText.delete("1.0", "end")
@@ -707,7 +720,13 @@ class needleData:
 
     def provideProperties(self):
         """Provide properties."""
-        properties = "\n".join(self.jsonData["properties"])
+        # Some needles do not have properties defined and they do not open in the
+        # application. We will do as if properties were empty (the mostly are anyway)
+        # and the field will be created in the json as we update the needle.
+        try:
+            properties = "\n".join(self.jsonData["properties"])
+        except KeyError:
+            properties = ""
         return properties
     
     def provideTags(self):
@@ -724,9 +743,16 @@ class needleData:
             wide = area["width"]
             high = area["height"]
             typ = area["type"]
+            try:
+                match = area["match"]
+            except KeyError:
+                match = None
             apos = xpos + wide
             bpos = ypos + high
-            areaData = [xpos, ypos, apos, bpos, typ]
+            if match:
+                areaData = [xpos, ypos, apos, bpos, typ, match]
+            else:
+                areaData = [xpos, ypos, apos, bpos, typ]
             self.areaPos += 1
             return areaData
         except IndexError:
@@ -739,9 +765,18 @@ class needleData:
         apos = coordinates[2]
         bpos = coordinates[3]
         typ = coordinates[4]
+        # Again, if no match is defined, the key is missing from the data.
+        try:
+            match = coordinates[5]
+        except IndexError:
+            match = None
         wide = int(apos) - int(xpos)
         high = int(bpos) - int(ypos)
-        area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
+        if match:
+            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ, "match":match}
+        else:
+            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
+
         if type(props) != list:
             props = [props]
         if type(tags) != list:
