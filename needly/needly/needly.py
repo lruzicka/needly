@@ -197,26 +197,32 @@ class Application:
         self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
         self.textLabel.grid(row=8, column=0, sticky="w")
         
-        self.textField = tk.Text(self.jsonFrame, width=30, height=5)
+        self.textField = tk.Text(self.jsonFrame, width=30, height=3)
         self.textField.grid(row=9, column=0, sticky="ew")
         
         self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
         self.jsonLabel.grid(row=10, column=0, sticky="w")
         
-        self.textJson = tk.Text(self.jsonFrame, width=30, height=10)
+        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
         self.textJson.grid(row=11, column=0, sticky="ew")
 
         self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
         self.needleLabel.grid(row=12, column=0, sticky="w")
 
         self.needleEntry = tk.Entry(self.jsonFrame, width=30)
-        self.needleEntry.grid(row=13, column=0, sticky="w")
+        self.needleEntry.grid(row=13, column=0, sticky="ew")
+
+        self.matchLabel = tk.Label(self.jsonFrame, text="Match level:")
+        self.matchLabel.grid(row=14, column=0, sticky="w")
+
+        self.matchEntry = tk.Entry(self.jsonFrame, width=30)
+        self.matchEntry.grid(row=15, column=0, sticky="ew")
 
         self.vmLabel = tk.Label(self.jsonFrame, text="VM connection:")
-        self.vmLabel.grid(row=14, column=0, sticky="w")
+        self.vmLabel.grid(row=16, column=0, sticky="w")
         
         self.vmEntry = tk.Entry(self.jsonFrame, width=30)
-        self.vmEntry.grid(row=15, column=0, sticky="w")
+        self.vmEntry.grid(row=17, column=0, sticky="ew")
         self.vmEntry.insert("end","Not connected")
 
 
