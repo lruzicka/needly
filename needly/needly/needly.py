@@ -36,7 +36,7 @@ class Application:
         self.toplevel.bind("<Control-o>", self.selectfile)
         self.toplevel.bind("<Control-q>", self.wrapquit)
         self.toplevel.bind("<Control-x>", self.renameFile)
-        self.toplevel.bind("<Control-c>", self.show_connect_VM)
+        self.toplevel.bind("<Control-b>", self.show_connect_VM)
         self.toplevel.bind("<Control-t>", self.takeScreenshot)
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
@@ -83,7 +83,7 @@ class Application:
         # Define the VM submenu
         self.menu_vm = tk.Menu(self.menu)
         self.menu.add_cascade(menu=self.menu_vm, label='vMachine')
-        self.menu_vm.add_command(label='Connect VM', accelerator='Ctrl-C', command=self.show_connect_VM)
+        self.menu_vm.add_command(label='Connect VM', accelerator='Ctrl-B', command=self.show_connect_VM)
         self.menu_vm.add_command(label='Take screenshot', accelerator='Ctrl-T', command=self.takeScreenshot)
         # Register the menu in the top level widget.
         self.toplevel['menu'] = self.menu
