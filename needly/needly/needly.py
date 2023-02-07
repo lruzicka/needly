@@ -22,6 +22,9 @@ class Application:
     def __init__(self):
         self.toplevel = tk.Tk()
         self.toplevel.title("Python Needle Editor for openQA (version 2.5)")
+        self.toplevel.minsize(1024, 860)
+        self.toplevel.grid_columnconfigure(0, weight=1)
+        self.toplevel.grid_rowconfigure(0, weight=1)
         self.create_menu()
         # Map keys to the application
         self.toplevel.bind("<Control-d>", self.readimages)
@@ -41,6 +44,10 @@ class Application:
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
         self.frame.grid()
+        self.frame.grid_columnconfigure(0, weight=3)
+        self.frame.grid_columnconfigure(1, weight=0)
+        self.frame.grid_rowconfigure(0, weight=1)
+
         self.buildWidgets()
         self.images = [] # List of images to be handled.
         self.needleCoordinates = [0, 0, 0, 0] # Coordinates of the needle area
@@ -131,15 +138,25 @@ class Application:
 
         self.picFrame = tk.Frame(self.frame)
         self.picFrame.grid(row=0, column=0)
+        self.picFrame.grid_columnconfigure(0, weight=5)
+        self.picFrame.grid_columnconfigure(1, weight=0)
+        self.picFrame.grid_rowconfigure(0, weight=5)
+        self.picFrame.grid_rowconfigure(1, weight=0)
 
         self.xscroll = tk.Scrollbar(self.picFrame, orient='horizontal')
-        self.xscroll.grid(row=1, column=0, sticky="we")
+        self.xscroll.grid(row=1, column=0, sticky="nswe")
+        self.xscroll.grid_columnconfigure(0, weight=1)
+        self.xscroll.grid_rowconfigure(0, weight=1)
 
         self.yscroll = tk.Scrollbar(self.picFrame, orient='vertical')
-        self.yscroll.grid(row=0, column=1, columnspan=2, sticky="ns")
+        self.yscroll.grid(row=0, column=1, sticky="nswe")
+        self.yscroll.grid_columnconfigure(0, weight=1)
+        self.yscroll.grid_rowconfigure(0, weight=1)
 
         self.pictureField = tk.Canvas(self.picFrame, height=769, width=1025, xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set)
         self.pictureField.grid(row=0, column=0)
+        self.pictureField.grid_columnconfigure(0, weight=1)
+        self.pictureField.grid_rowconfigure(0, weight=1)
         self.pictureField.config(scrollregion=self.pictureField.bbox('ALL'))
         # Bind picture specific keys
         self.pictureField.bind("<Button 1>", self.startArea)
@@ -154,7 +171,7 @@ class Application:
         self.yscroll.config(command=self.pictureField.yview)
 
         self.jsonFrame = tk.Frame(self.frame, padx=10)
-        self.jsonFrame.grid(row=0, column=2, sticky="news")
+        self.jsonFrame.grid(row=0, column=1, sticky="news")
 
         self.nameLabel = tk.Label(self.jsonFrame, text="Filename:")
         self.nameLabel.grid(row=0, column=0, sticky="w")
@@ -262,6 +279,7 @@ class Application:
         """Read png images from the given directory and create a list of their names."""
         self.images = []
         self.directory = filedialog.askdirectory()
+        print(self.directory)
         if self.directory:
             for file in os.listdir(self.directory):
                 if file.endswith(".png"):
@@ -301,7 +319,8 @@ class Application:
         """Display image on the canvas."""
         self.picture = Image.open(path)
         self.picsize = (self.picture.width,self.picture.height)
-        self.pictureField.config(width=self.picsize[0], height=self.picsize[1])
+        scrollregion = f"0 0 {self.picsize[0]} {self.picsize[1]}"
+        self.pictureField.config(width=self.picsize[0], height=self.picsize[1], xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set, scrollregion=scrollregion)
         self.image = tk.PhotoImage(file=path)
         self.background = self.pictureField.create_image((1, 1), image=self.image, anchor='nw')
         self.nameEntry.config(state="normal")
@@ -469,16 +488,16 @@ class Application:
 
     def startArea(self, event):
         """Get coordinates on mouse click and start drawing the rectangle from this point."""
-        xpos = event.x
-        ypos = event.y
+        xpos = int(self.pictureField.canvasx(event.x))
+        ypos = int(self.pictureField.canvasy(event.y))
         self.startPoint = [xpos, ypos]
         if self.rectangle == None:
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
 
     def redrawArea(self, event):
         """Upon mouse drag update the size of the rectangle as the mouse is moving."""
-        apos = event.x
-        bpos = event.y
+        apos = int(self.pictureField.canvasx(event.x))
+        bpos = int(self.pictureField.canvasy(event.y))
         self.endPoint = [apos, bpos]
         self.needleCoordinates = self.startPoint + self.endPoint
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
