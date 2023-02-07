@@ -22,6 +22,9 @@ class Application:
     def __init__(self):
         self.toplevel = tk.Tk()
         self.toplevel.title("Python Needle Editor for openQA (version 2.5)")
+        self.toplevel.minsize(1024, 860)
+        self.toplevel.grid_columnconfigure(0, weight=1)
+        self.toplevel.grid_rowconfigure(0, weight=1)
         self.create_menu()
         # Map keys to the application
         self.toplevel.bind("<Control-d>", self.readimages)
@@ -41,6 +44,10 @@ class Application:
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
         self.frame.grid()
+        self.frame.grid_columnconfigure(0, weight=3)
+        self.frame.grid_columnconfigure(1, weight=0)
+        self.frame.grid_rowconfigure(0, weight=1)
+
         self.buildWidgets()
         self.images = [] # List of images to be handled.
         self.needleCoordinates = [0, 0, 0, 0] # Coordinates of the needle area
@@ -106,7 +113,7 @@ class Application:
         else:
             # If however, we start the application with the PNG file, the json needle file
             # might not exist, therefore we need to perform a test first, before we try to load
-            # it. 
+            # it.
             # If the test fails, we will at least set the tag from the filename
             # to save users some time to type. Users can edit it, later and change the file name
             # from within the application.
@@ -125,21 +132,31 @@ class Application:
         self.imageCount = 0
         path = os.path.join(self.directory, self.imageName)
         self.displayImage(path)
-        
+
     def buildWidgets(self):
         """Construct GUI"""
-        
+
         self.picFrame = tk.Frame(self.frame)
         self.picFrame.grid(row=0, column=0)
-                
+        self.picFrame.grid_columnconfigure(0, weight=5)
+        self.picFrame.grid_columnconfigure(1, weight=0)
+        self.picFrame.grid_rowconfigure(0, weight=5)
+        self.picFrame.grid_rowconfigure(1, weight=0)
+
         self.xscroll = tk.Scrollbar(self.picFrame, orient='horizontal')
-        self.xscroll.grid(row=1, column=0, sticky="we")
-        
+        self.xscroll.grid(row=1, column=0, sticky="nswe")
+        self.xscroll.grid_columnconfigure(0, weight=1)
+        self.xscroll.grid_rowconfigure(0, weight=1)
+
         self.yscroll = tk.Scrollbar(self.picFrame, orient='vertical')
-        self.yscroll.grid(row=0, column=1, columnspan=2, sticky="ns")
+        self.yscroll.grid(row=0, column=1, sticky="nswe")
+        self.yscroll.grid_columnconfigure(0, weight=1)
+        self.yscroll.grid_rowconfigure(0, weight=1)
 
         self.pictureField = tk.Canvas(self.picFrame, height=769, width=1025, xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set)
         self.pictureField.grid(row=0, column=0)
+        self.pictureField.grid_columnconfigure(0, weight=1)
+        self.pictureField.grid_rowconfigure(0, weight=1)
         self.pictureField.config(scrollregion=self.pictureField.bbox('ALL'))
         # Bind picture specific keys
         self.pictureField.bind("<Button 1>", self.startArea)
@@ -149,22 +166,22 @@ class Application:
         self.pictureField.bind("<Down>", self.resizeArea)
         self.pictureField.bind("<Left>", self.resizeArea)
         self.pictureField.bind("<Right>", self.resizeArea)
-        
+
         self.xscroll.config(command=self.pictureField.xview)
         self.yscroll.config(command=self.pictureField.yview)
-        
+
         self.jsonFrame = tk.Frame(self.frame, padx=10)
-        self.jsonFrame.grid(row=0, column=2, sticky="news")
+        self.jsonFrame.grid(row=0, column=1, sticky="news")
 
         self.nameLabel = tk.Label(self.jsonFrame, text="Filename:")
         self.nameLabel.grid(row=0, column=0, sticky="w")
-        
+
         self.nameEntry = tk.Entry(self.jsonFrame)
         self.nameEntry.grid(row=1, column=0, sticky="ew")
-        
+
         self.propLabel = tk.Label(self.jsonFrame, text="Properties:")
         self.propLabel.grid(row=2, column=0, sticky="w")
-        
+
         self.propText = tk.Text(self.jsonFrame, width=30, height=4)
         self.propText.grid(row=3, column=0, sticky="ew")
 
@@ -176,7 +193,7 @@ class Application:
 
         self.axLable = tk.Label(self.coordFrame, text="X1:")
         self.axLable.grid(row=0, column=0, sticky="w")
-        
+
         self.axEntry = tk.Entry(self.coordFrame, width=5)
         self.axEntry.grid(row=0, column=1, sticky="w")
 
@@ -212,10 +229,10 @@ class Application:
 
         self.listLabel = tk.Label(self.jsonFrame, text="Area type:")
         self.listLabel.grid(row=6, column=0, sticky="w")
-        
+
         self.typeList = tk.Spinbox(self.jsonFrame, values=["match","ocr","exclude"])
         self.typeList.grid(row=7, column=0, sticky="ew")
-        
+
         self.matchLabel = tk.Label(self.jsonFrame, text="Match level:")
         self.matchLabel.grid(row=8, column=0, sticky="w")
 
@@ -224,13 +241,13 @@ class Application:
 
         self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
         self.textLabel.grid(row=10, column=0, sticky="w")
-        
+
         self.textField = tk.Text(self.jsonFrame, width=30, height=3)
         self.textField.grid(row=11, column=0, sticky="ew")
-        
+
         self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
         self.jsonLabel.grid(row=12, column=0, sticky="w")
-        
+
         self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
         self.textJson.grid(row=13, column=0, sticky="ew")
 
@@ -242,13 +259,13 @@ class Application:
 
         self.vmLabel = tk.Label(self.jsonFrame, text="VM connection:")
         self.vmLabel.grid(row=16, column=0, sticky="w")
-        
+
         self.vmEntry = tk.Entry(self.jsonFrame, width=30)
         self.vmEntry.grid(row=17, column=0, sticky="ew")
         self.vmEntry.insert("end","Not connected")
 
 
-    def wrapopen(self): # These functions serve as wrappers for key bindings that were not able to invoke 
+    def wrapopen(self): # These functions serve as wrappers for key bindings that were not able to invoke
         self.selectfile()
 
     def wrapquit(self, event=None):
@@ -257,11 +274,12 @@ class Application:
     def returnPath(self, image):
         """Create a full path from working directory and image name."""
         return os.path.join(self.directory, image)
-    
+
     def readimages(self, event=None):
         """Read png images from the given directory and create a list of their names."""
         self.images = []
         self.directory = filedialog.askdirectory()
+        print(self.directory)
         if self.directory:
             for file in os.listdir(self.directory):
                 if file.endswith(".png"):
@@ -301,6 +319,8 @@ class Application:
         """Display image on the canvas."""
         self.picture = Image.open(path)
         self.picsize = (self.picture.width,self.picture.height)
+        scrollregion = f"0 0 {self.picsize[0]} {self.picsize[1]}"
+        self.pictureField.config(width=self.picsize[0], height=self.picsize[1], xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set, scrollregion=scrollregion)
         self.image = tk.PhotoImage(file=path)
         self.background = self.pictureField.create_image((1, 1), image=self.image, anchor='nw')
         self.nameEntry.config(state="normal")
@@ -308,7 +328,7 @@ class Application:
         self.nameEntry.insert("end", self.imageName)
         self.nameEntry.config(state="readonly")
         self.pictureField.focus_set()
-               
+
     def nextImage(self, event=None):
         """Display next image on the list."""
         self.imageCount += 1
@@ -348,7 +368,7 @@ class Application:
             self.displayImage(self.returnPath(self.imageName))
         else:
             pass
-        
+
     def getCoordinates(self):
         """Read coordinates from the coordinate windows."""
         xpos = None
@@ -371,10 +391,9 @@ class Application:
         width = int(coordinates[2]) - int(coordinates[0])
         heigth = int(coordinates[3]) - int(coordinates[1])
         return [width, heigth]
-            
+
     def showArea(self, event=None):
         """Load area and draw a rectangle around it."""
-        #self.getCoordinates()
         self.area = self.needle.provideNextArea()
         try:
             self.needleCoordinates = [self.area[0], self.area[1], self.area[2], self.area[3]]
@@ -384,7 +403,7 @@ class Application:
                 match = self.area[5]
             except IndexError:
                 match = None
-                
+
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
             self.rectangles.append(self.rectangle)
             self.displayCoordinates(self.needleCoordinates)
@@ -413,7 +432,7 @@ class Application:
         self.widthEntry.insert("end", size[0])
         self.heigthEntry.delete(0, "end")
         self.heigthEntry.insert("end", size[1])
-        
+
     def modifyArea(self, event=None):
         """Update the information for the active needle area, including properties, tags, etc."""
         self.getCoordinates()
@@ -443,7 +462,7 @@ class Application:
         json = self.needle.provideJson()
         self.textJson.insert("end", json)
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
-        
+
     def addAreaToNeedle(self, event=None):
         """Add new area to needle. The needle can have more areas."""
         self.needle.addArea()
@@ -466,23 +485,23 @@ class Application:
         self.textJson.insert("end", json)
         self.pictureField.delete(self.rectangle)
         self.showArea(None)
-        
+
     def startArea(self, event):
         """Get coordinates on mouse click and start drawing the rectangle from this point."""
-        xpos = event.x
-        ypos = event.y
+        xpos = int(self.pictureField.canvasx(event.x))
+        ypos = int(self.pictureField.canvasy(event.y))
         self.startPoint = [xpos, ypos]
         if self.rectangle == None:
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
-            
+
     def redrawArea(self, event):
         """Upon mouse drag update the size of the rectangle as the mouse is moving."""
-        apos = event.x
-        bpos = event.y
+        apos = int(self.pictureField.canvasx(event.x))
+        bpos = int(self.pictureField.canvasy(event.y))
         self.endPoint = [apos, bpos]
         self.needleCoordinates = self.startPoint + self.endPoint
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
-        
+
     def endArea(self, event):
         """Stop drawing the rectangle and record the coordinates to match the final size."""
         coordinates = [0, 0, 1, 1]
@@ -491,7 +510,7 @@ class Application:
         apos = self.needleCoordinates[2]
         bpos = self.needleCoordinates[3]
         self.pictureField.focus_set()
-        
+
         if xpos <= apos and ypos <= bpos:
             coordinates[0] = xpos
             coordinates[1] = ypos
@@ -541,7 +560,7 @@ class Application:
             x = 2
             y = 3
             step = 1
-        
+
         if event.keycode == 113:
             self.needleCoordinates[x] = self.needleCoordinates[x] - step
         elif event.keycode == 114:
@@ -550,12 +569,12 @@ class Application:
             self.needleCoordinates[y] = self.needleCoordinates[y] - step
         elif event.keycode == 116:
             self.needleCoordinates[y] = self.needleCoordinates[y] + step
-        
+
         self.displayCoordinates(self.needleCoordinates)
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
-        
 
-        
+
+
     def loadNeedle(self, event=None):
         """Load the existing needle information from the file and display them in the window."""
         if self.imageName != None:
@@ -660,12 +679,12 @@ class Application:
         self.vmEntry.delete("0", "end")
         self.vmEntry.insert("end", self.virtual_machine)
 
-        
+
     def takeScreenshot(self, event=None):
         """ Take the screenshot from the running virtual machine. As only .ppm files
         are possible, use imagemagick to convert the shot into a .png file and save
         it. """
-        # When no VM has been previously selected, there is no need 
+        # When no VM has been previously selected, there is no need
         # to try and take screenshots.
         if not self.virtual_machine:
             messagebox.showerror("No VM connected", "Connect a VM before you try taking screenshots from it. Use the CTRL-V key shortcut.")
@@ -677,7 +696,7 @@ class Application:
             # Create a stream to the hypervisor
             stream = self.kvm.newStream()
             # Collect the available image type of the first screen
-            # On a VM usually only one screen is available, 
+            # On a VM usually only one screen is available,
             # so we will take the first one and will not bother
             # about others.
             image_type = domain.screenshot(stream, 0)
@@ -754,12 +773,12 @@ class needleData:
         except KeyError:
             properties = ""
         return properties
-    
+
     def provideTags(self):
         """Provide tags."""
         tags = "\n".join(self.jsonData["tags"])
         return tags
-    
+
     def provideNextArea(self):
         """Provide information about the active area and move pointer to the next area for future reference."""
         try:
@@ -809,13 +828,13 @@ class needleData:
             tags = [tags]
         self.jsonData["properties"] = props
         self.jsonData["tags"] = tags
-        
+
         try:
             self.areas[self.areaPos-1] = area
         except IndexError:
             messagebox.showerror("Error", "Cannot modify non-existent area. Add area first!")
         self.jsonData["area"] = self.areas
-            
+
     def addArea(self):
         """Add new area to the needle (at the end of the list)."""
         self.areas.append("newarea")
@@ -844,7 +863,7 @@ try:
     path = sys.argv[1]
 except IndexError:
     path = None
-    
+
 app = Application()
 
 if path != None:
