@@ -35,7 +35,7 @@ class Application:
     """ Hold the GUI frames and widgets, as well as the handling in the GUI. """
     def __init__(self):
         self.toplevel = tk.Tk()
-        self.toplevel.title("Python Needle Editor for openQA (version 2.5.91)")
+        self.toplevel.title("Python Needle Editor for openQA (version 2.5.93)")
         self.toplevel.minsize(1024, 860)
         self.toplevel.grid_columnconfigure(0, weight=1)
         self.toplevel.grid_rowconfigure(0, weight=1)
