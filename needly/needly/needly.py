@@ -596,7 +596,8 @@ class Application:
         if self.imageName is not None:
             jsonfile = self.returnPath(self.imageName).replace(".png", ".json")
             self.handler = fileHandler(jsonfile)
-            self.handler.readFile()
+            if not self.handler.readFile():
+                return
             jsondata = self.handler.provideData()
             self.needle = needleData(jsondata)
             properties = self.needle.provideProperties()
@@ -774,14 +775,19 @@ class fileHandler:
 
     def readFile(self):
         """Read the json file and create the data variable with the info."""
+        success = False
         try:
             with open(self.jsonfile, "r") as inFile:
                 self.jsonData = json.load(inFile)
+                success = True
         except FileNotFoundError:
             if self.jsonfile != "empty":
                 messagebox.showerror("Error", "No needle exists. Create one.")
             else:
                 messagebox.showerror("Error", "No images are loaded. Select image directory.")
+        except json.JSONDecodeError as e:
+            messagebox.showerror("Error", f"Failed to load JSON.\n\n{e}")
+        return success
 
     def writeFile(self, jsonfile):
         """Take the data variable and write is out as a json file."""
