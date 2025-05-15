@@ -54,6 +54,7 @@ class Application:
         self.toplevel.bind("<Control-x>", self.renameFile)
         self.toplevel.bind("<Control-b>", self.show_connect_VM)
         self.toplevel.bind("<Control-t>", self.takeScreenshot)
+        self.toplevel.bind("<Control-k>", self.showDebugJson)
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
         self.frame.grid()
@@ -61,6 +62,7 @@ class Application:
         self.frame.grid_columnconfigure(1, weight=0)
         self.frame.grid_rowconfigure(0, weight=1)
 
+        self.textJson = None # Widget for JSON output debugging
         self.buildWidgets()
         self.images = [] # List of images to be handled.
         self.needleCoordinates = [0, 0, 0, 0] # Coordinates of the needle area
@@ -221,12 +223,7 @@ class Application:
 
         self.widthEntry = tk.Entry(self.coordFrame, width=5)
         self.widthEntry.grid(row=0, column=5, sticky="w")
-
-        self.heightLabel = tk.Label(areaFrame, text="Area height:")
-        self.heightLabel.grid(row=1, column=4, sticky="w")
-
-        self.heightEntry = tk.Entry(areaFrame, width=5)
-        self.heightEntry.grid(row=1, column=5, sticky="w")
+        self.widthEntry.config(state="readonly")
 
         self.bxLable = tk.Label(self.coordFrame, text="X2:")
         self.bxLable.grid(row=1, column=0, sticky="w")
@@ -239,6 +236,13 @@ class Application:
 
         self.byEntry = tk.Entry(self.coordFrame, width=5)
         self.byEntry.grid(row=1, column=3, sticky="w")
+
+        self.heightLabel = tk.Label(self.coordFrame, text="Area height:")
+        self.heightLabel.grid(row=1, column=4, sticky="w")
+
+        self.heightEntry = tk.Entry(self.coordFrame, width=5)
+        self.heightEntry.grid(row=1, column=5, sticky="w")
+        self.heightEntry.config(state="readonly")
 
         self.listLabel = tk.Label(self.jsonFrame, text="Area type:")
         self.listLabel.grid(row=6, column=0, sticky="w")
@@ -258,11 +262,7 @@ class Application:
         self.textField = tk.Text(self.jsonFrame, width=30, height=3)
         self.textField.grid(row=11, column=0, sticky="ew")
 
-        self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
-        self.jsonLabel.grid(row=12, column=0, sticky="w")
 
-        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
-        self.textJson.grid(row=13, column=0, sticky="ew")
 
         self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
         self.needleLabel.grid(row=14, column=0, sticky="w")
@@ -276,6 +276,7 @@ class Application:
         self.vmEntry = tk.Entry(self.jsonFrame, width=30)
         self.vmEntry.grid(row=17, column=0, sticky="ew")
         self.vmEntry.insert("end","Not connected")
+        self.vmEntry.config(state="readonly")
 
 
     def wrapopen(self): # These functions serve as wrappers for key bindings that were not able to invoke
@@ -441,10 +442,16 @@ class Application:
         self.byEntry.delete(0, "end")
         self.byEntry.insert("end", coordinates[3])
         size = self.calculateSize(coordinates)
+
+        self.widthEntry.config(state="normal")
         self.widthEntry.delete(0, "end")
         self.widthEntry.insert("end", size[0])
+        self.widthEntry.config(state="readonly")
+
+        self.heightEntry.config(state="normal")
         self.heightEntry.delete(0, "end")
         self.heightEntry.insert("end", size[1])
+        self.heightEntry.config(state="readonly")
 
     def modifyArea(self, event=None):
         """Update the information for the active needle area, including properties, tags, etc."""
@@ -471,9 +478,7 @@ class Application:
         else:
             coordinates = [xpos, ypos, apos, bpos, typ]
         self.needle.update(coordinates, tags, props)
-        self.textJson.delete("1.0", "end")
-        json = self.needle.provideJson()
-        self.textJson.insert("end", json)
+        self.updateDebugJson()
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
 
     def addAreaToNeedle(self, event=None):
@@ -493,10 +498,8 @@ class Application:
         self.displayCoordinates(coordinates)
         self.needleEntry.delete(0, "end")
         self.needleEntry.insert("end", areas)
-        json = self.needle.provideJson()
-        self.textJson.delete("1.0", "end")
-        self.textJson.insert("end", json)
         self.pictureField.delete(self.rectangle)
+        self.updateDebugJson()
         self.showArea(None)
 
     def startArea(self, event):
@@ -602,12 +605,10 @@ class Application:
             tags = self.needle.provideTags()
             self.textField.delete("1.0", "end")
             self.textField.insert("end", tags)
-            json = self.needle.provideJson()
-            self.textJson.delete("1.0", "end")
-            self.textJson.insert("end", json)
             areas = self.needle.provideAreaCount()
             self.needleEntry.delete(0, "end")
             self.needleEntry.insert(0, areas)
+            self.updateDebugJson()
             if self.rectangle is not None:
                 self.pictureField.delete(self.rectangle)
                 self.rectangle = None
@@ -692,8 +693,10 @@ class Application:
             messagebox.showerror("No VM selected", "Please, select one of the available VMs.")
         self.virtual_machine = selected
         self.connect_dialogue.destroy()
+        self.vmEntry.config(state="normal")
         self.vmEntry.delete("0", "end")
         self.vmEntry.insert("end", self.virtual_machine)
+        self.vmEntry.config(state="readonly")
 
 
     def takeScreenshot(self, event=None):
@@ -734,6 +737,31 @@ class Application:
             self.displayImage(path)
             self.textField.delete("1.0", "end")
             self.textField.insert("end", self.imageName)
+
+    def showDebugJson(self, event):
+        """Show the JSON output widget for debugging."""
+        if self.textJson:
+            return
+
+        self.jsonLabel = tk.Label(self.jsonFrame, text="JSON Data:")
+        self.jsonLabel.grid(row=19, column=0, sticky="w")
+
+        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
+        self.textJson.grid(row=20, column=0, sticky="ew")
+        self.textJson.config(state="disabled")
+
+        self.updateDebugJson()
+
+    def updateDebugJson(self):
+        """If the JSON output widget is shown update its contents."""
+        if not self.textJson:
+            return
+
+        self.textJson.config(state="normal")
+        self.textJson.delete("1.0", "end")
+        json = self.needle.provideJson()
+        self.textJson.insert("end", json)
+        self.textJson.config(state="disabled")
 
 #-----------------------------------------------------------------------------------------------
 
