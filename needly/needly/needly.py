@@ -72,7 +72,6 @@ class Application:
         self.imageName = None # The name of the active image
         self.handler = None # The file reader and writer object
         self.imageCount = 0 # Counter for
-        self.rectangles = [] # Holder for rectangles
         self.kvm = None # Connection to KVM hypervisor
         self.virtual_machine = None # Holds the name of the connected virtual machine
 
@@ -151,6 +150,10 @@ class Application:
                 # Or just prefill the tag field from the file name.
                 tag = self.imageName.split('.')[0]
                 self.textField.insert("end", tag)
+
+        # Add a default area if creating new or opening needle with zero areas
+        if not self.needle.haveCurrentArea():
+            self.addAreaToNeedle()
 
     def buildWidgets(self):
         """Construct GUI"""
@@ -413,12 +416,12 @@ class Application:
 
     def showArea(self, event=None):
         """Load area and draw a rectangle around it."""
+        self.clearAreaRender()
         self.area = self.needle.provideNextArea()
         try:
             self.needleCoordinates = self.area.coordinates
 
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
-            self.rectangles.append(self.rectangle)
             self.displayCoordinates(self.needleCoordinates)
             self.typeList.delete(0, "end")
             self.typeList.insert("end", self.area.type)
@@ -427,10 +430,14 @@ class Application:
             if self.area.match:
                 self.matchEntry.insert("end", self.area.match)
             self.updateCurrentAreaLabel()
-        except TypeError:
-            for r in self.rectangles:
-                self.pictureField.delete(r)
+        except TypeError as e:
+            print(f"Unexpected error displaying needle area: {e}")
 
+    def clearAreaRender(self):
+        """Clear rendering of current area and reset tracking variables."""
+        if self.rectangle:
+            self.pictureField.delete(self.rectangle)
+            self.rectangle = None
 
     def displayCoordinates(self, coordinates):
         """Disply coordinates in the GUI"""
@@ -456,6 +463,10 @@ class Application:
 
     def modifyArea(self, event=None):
         """Update the information for the active needle area, including properties, tags, etc."""
+        if not self.needle.haveCurrentArea():
+            messagebox.showerror("Error", "You have found a bug and don't have a current area. Add area first!")
+            return
+
         self.getCoordinates()
         xpos = self.needleCoordinates[0]
         ypos = self.needleCoordinates[1]
@@ -481,8 +492,11 @@ class Application:
 
     def addAreaToNeedle(self, event=None):
         """Add new area to needle. The needle can have more areas."""
-        self.needle.addArea()
-        self.modifyArea(None)
+        newArea = areaData.getNew(*self.picsize)
+        if self.needle.haveCurrentArea():
+            self.modifyArea(None)
+        self.needle.addArea(newArea.toDict())
+        self.showArea()
 
     def updateCurrentAreaLabel(self):
         """Update current area to area frame."""
@@ -492,10 +506,8 @@ class Application:
     def removeAreaFromNeedle(self, event=None):
         """Remove the active area from the needle (deletes it)."""
         self.needle.removeArea()
-        coordinates = [0, 0, 0, 0]
-        self.displayCoordinates(coordinates)
-        self.pictureField.delete(self.rectangle)
-        self.updateCurrentAreaLabel()
+        if not self.needle.haveCurrentArea():
+            self.addAreaToNeedle()
         self.updateDebugJson()
         self.showArea(None)
 
@@ -597,6 +609,7 @@ class Application:
                 return
             jsondata = self.handler.provideData()
             self.needle = needleData(jsondata)
+            self.clearAreaRender()
             properties = self.needle.provideProperties()
             self.propText.delete("1.0", "end")
             self.propText.insert("end", properties)
@@ -605,9 +618,6 @@ class Application:
             self.textField.insert("end", tags)
             self.updateDebugJson()
             self.updateCurrentAreaLabel()
-            if self.rectangle is not None:
-                self.pictureField.delete(self.rectangle)
-                self.rectangle = None
             self.showArea(None)
         else:
             messagebox.showerror("Error", "No images are loaded. Select image directory first.")
@@ -621,8 +631,6 @@ class Application:
             self.handler = fileHandler(path)
         self.handler.acceptData(jsondata)
         self.handler.writeFile(path)
-        self.pictureField.delete(self.rectangle)
-        self.rectangle = None
 
     def renameFile(self, event=None):
         """ Rename the needle PNG file with the top placed tag. """
@@ -860,17 +868,17 @@ class needleData:
         self.areas[self.areaPos-1] = area
         self.jsonData["area"] = self.areas
 
-    def addArea(self):
+    def addArea(self, area):
         """Add new area to the needle (at the end of the list)."""
-        self.areas.append("newarea")
-        self.areaPos = len(self.areas)
+        self.areas.append(area)
+        self.areaPos = len(self.areas) - 1
 
     def removeArea(self):
         """Remove the active area from the area list."""
         try:
             self.areas.pop(self.areaPos-1)
             self.jsonData["area"] = self.areas
-            self.areaPos -= 2
+            self.areaPos -= 1
         except IndexError:
             messagebox.showerror("Error", "No area in the needle. Not deleting anything.")
 
@@ -917,6 +925,21 @@ class areaData:
         if self.match:
             out["match"] = self.match
         return out
+
+    @staticmethod
+    def getNew(image_width, image_height):
+        """Create a new area in the middle of the image."""
+        width = int(image_width/10)
+        height = int(image_height/10)
+        x = int(image_width/2 - width/2)
+        y = int(image_height/2 - height/2)
+        return areaData({
+            "xpos": x,
+            "ypos": y,
+            "width": width,
+            "height": height,
+            "type": "match",
+        })
 
 #-----------------------------------------------------------------------------------------------
 
