@@ -204,81 +204,82 @@ class Application:
         self.propText = tk.Text(self.jsonFrame, width=30, height=4)
         self.propText.grid(row=3, column=0, sticky="ew")
 
-        self.needleUL = tk.Label(self.jsonFrame, text="Area Coordinates:")
-        self.needleUL.grid(row=4, column=0, sticky="w")
+        areaFrame = tk.LabelFrame(self.jsonFrame, text="Area", padx=5, pady=5)
+        areaFrame.grid(row=4, column=0, sticky="ew")
 
-        self.coordFrame = tk.Frame(self.jsonFrame)
-        self.coordFrame.grid(row=5, column=0, sticky="ew")
+        self.needleUL = tk.Label(areaFrame, text="Coordinates:")
+        self.needleUL.grid(row=0, column=0, columnspan=2, sticky="w")
 
-        self.axLable = tk.Label(self.coordFrame, text="X1:")
-        self.axLable.grid(row=0, column=0, sticky="w")
+        self.axLabel = tk.Label(areaFrame, text="X1:")
+        self.axLabel.grid(row=1, column=0, sticky="w")
 
-        self.axEntry = tk.Entry(self.coordFrame, width=5)
-        self.axEntry.grid(row=0, column=1, sticky="w")
+        self.axEntry = tk.Entry(areaFrame, width=5)
+        self.axEntry.grid(row=1, column=1, sticky="w")
 
-        self.ayLable = tk.Label(self.coordFrame, text="Y1:")
-        self.ayLable.grid(row=0, column=2, sticky="w")
+        self.ayLabel = tk.Label(areaFrame, text="Y1:")
+        self.ayLabel.grid(row=1, column=2, sticky="w")
 
-        self.ayEntry = tk.Entry(self.coordFrame, width=5)
-        self.ayEntry.grid(row=0, column=3, sticky="w")
+        self.ayEntry = tk.Entry(areaFrame, width=5)
+        self.ayEntry.grid(row=1, column=3, sticky="w")
 
-        self.widthLabel = tk.Label(self.coordFrame, text="Area width:")
-        self.widthLabel.grid(row=0, column=4, sticky="w")
+        self.widthLabel = tk.Label(areaFrame, text="Width:")
+        self.widthLabel.grid(row=1, column=4, sticky="w")
 
-        self.widthEntry = tk.Entry(self.coordFrame, width=5)
-        self.widthEntry.grid(row=0, column=5, sticky="w")
+        self.widthEntry = tk.Entry(areaFrame, width=5)
+        self.widthEntry.grid(row=1, column=5, sticky="w")
         self.widthEntry.config(state="readonly")
 
-        self.bxLable = tk.Label(self.coordFrame, text="X2:")
-        self.bxLable.grid(row=1, column=0, sticky="w")
+        self.bxLabel = tk.Label(areaFrame, text="X2:")
+        self.bxLabel.grid(row=2, column=0, sticky="w")
 
-        self.bxEntry = tk.Entry(self.coordFrame, width=5)
-        self.bxEntry.grid(row=1, column=1, sticky="w")
+        self.bxEntry = tk.Entry(areaFrame, width=5)
+        self.bxEntry.grid(row=2, column=1, sticky="w")
 
-        self.byLable = tk.Label(self.coordFrame, text="Y2:")
-        self.byLable.grid(row=1, column=2, sticky="w")
+        self.byLabel = tk.Label(areaFrame, text="Y2:")
+        self.byLabel.grid(row=2, column=2, sticky="w")
 
-        self.byEntry = tk.Entry(self.coordFrame, width=5)
-        self.byEntry.grid(row=1, column=3, sticky="w")
+        self.byEntry = tk.Entry(areaFrame, width=5)
+        self.byEntry.grid(row=2, column=3, sticky="w")
 
-        self.heightLabel = tk.Label(self.coordFrame, text="Area height:")
-        self.heightLabel.grid(row=1, column=4, sticky="w")
+        self.heightLabel = tk.Label(areaFrame, text="Height:")
+        self.heightLabel.grid(row=2, column=4, sticky="w")
 
-        self.heightEntry = tk.Entry(self.coordFrame, width=5)
-        self.heightEntry.grid(row=1, column=5, sticky="w")
+        self.heightEntry = tk.Entry(areaFrame, width=5)
+        self.heightEntry.grid(row=2, column=5, sticky="w")
         self.heightEntry.config(state="readonly")
 
         self.listLabel = tk.Label(self.jsonFrame, text="Area type:")
         self.listLabel.grid(row=6, column=0, sticky="w")
+        self.listLabel = tk.Label(areaFrame, text="Type:")
+        self.listLabel.grid(row=3, column=0, columnspan=6, sticky="w")
 
-        self.typeList = tk.Spinbox(self.jsonFrame, values=["match","ocr","exclude"])
-        self.typeList.grid(row=7, column=0, sticky="ew")
+        self.typeList = tk.Spinbox(areaFrame, values=["match","ocr","exclude"])
+        self.typeList.grid(row=4, column=0, columnspan=6, sticky="ew")
 
-        self.matchLabel = tk.Label(self.jsonFrame, text="Match level:")
-        self.matchLabel.grid(row=8, column=0, sticky="w")
+        self.matchLabel = tk.Label(areaFrame, text="Match level:")
+        self.matchLabel.grid(row=5, column=0, columnspan=6, sticky="w")
 
-        self.matchEntry = tk.Entry(self.jsonFrame, width=30)
-        self.matchEntry.grid(row=9, column=0, sticky="ew")
+        self.matchEntry = tk.Entry(areaFrame, width=30)
+        self.matchEntry.grid(row=6, column=0, columnspan=6, sticky="ew")
+
+
+
+
+
+
+        self.areaFrame = areaFrame
 
         self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
-        self.textLabel.grid(row=10, column=0, sticky="w")
+        self.textLabel.grid(row=5, column=0, sticky="w")
 
         self.textField = tk.Text(self.jsonFrame, width=30, height=3)
-        self.textField.grid(row=11, column=0, sticky="ew")
-
-
-
-        self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
-        self.needleLabel.grid(row=14, column=0, sticky="w")
-
-        self.needleEntry = tk.Entry(self.jsonFrame, width=30)
-        self.needleEntry.grid(row=15, column=0, sticky="ew")
+        self.textField.grid(row=6, column=0, sticky="ew")
 
         self.vmLabel = tk.Label(self.jsonFrame, text="VM connection:")
-        self.vmLabel.grid(row=16, column=0, sticky="w")
+        self.vmLabel.grid(row=7, column=0, sticky="w")
 
         self.vmEntry = tk.Entry(self.jsonFrame, width=30)
-        self.vmEntry.grid(row=17, column=0, sticky="ew")
+        self.vmEntry.grid(row=8, column=0, sticky="ew")
         self.vmEntry.insert("end","Not connected")
         self.vmEntry.config(state="readonly")
 
@@ -430,6 +431,7 @@ class Application:
             if match:
                 self.matchEntry.delete(0, "end")
                 self.matchEntry.insert("end", match)
+            self.updateCurrentAreaLabel()
         except TypeError:
             for r in self.rectangles:
                 self.pictureField.delete(r)
@@ -489,20 +491,19 @@ class Application:
         """Add new area to needle. The needle can have more areas."""
         self.needle.addArea()
         self.modifyArea(None)
-        areas = self.needle.provideAreaCount()
-        self.needleEntry.delete(0, "end")
-        self.needleEntry.insert("end", areas)
 
+    def updateCurrentAreaLabel(self):
+        """Update current area to area frame."""
+        position = self.needle.provideCurrentAreaLabel()
+        self.areaFrame["text"] = f"Area {position}"
 
     def removeAreaFromNeedle(self, event=None):
         """Remove the active area from the needle (deletes it)."""
         self.needle.removeArea()
-        areas = self.needle.provideAreaCount()
         coordinates = [0, 0, 0, 0]
         self.displayCoordinates(coordinates)
-        self.needleEntry.delete(0, "end")
-        self.needleEntry.insert("end", areas)
         self.pictureField.delete(self.rectangle)
+        self.updateCurrentAreaLabel()
         self.updateDebugJson()
         self.showArea(None)
 
@@ -610,10 +611,8 @@ class Application:
             tags = self.needle.provideTags()
             self.textField.delete("1.0", "end")
             self.textField.insert("end", tags)
-            areas = self.needle.provideAreaCount()
-            self.needleEntry.delete(0, "end")
-            self.needleEntry.insert(0, areas)
             self.updateDebugJson()
+            self.updateCurrentAreaLabel()
             if self.rectangle is not None:
                 self.pictureField.delete(self.rectangle)
                 self.rectangle = None
@@ -749,10 +748,10 @@ class Application:
             return
 
         self.jsonLabel = tk.Label(self.jsonFrame, text="JSON Data:")
-        self.jsonLabel.grid(row=19, column=0, sticky="w")
+        self.jsonLabel.grid(row=9, column=0, sticky="w")
 
         self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
-        self.textJson.grid(row=20, column=0, sticky="ew")
+        self.textJson.grid(row=10, column=0, sticky="ew")
         self.textJson.config(state="disabled")
 
         self.updateDebugJson()
@@ -903,9 +902,9 @@ class needleData:
         except IndexError:
             messagebox.showerror("Error", "No area in the needle. Not deleting anything.")
 
-    def provideAreaCount(self):
-        """Provide the number of the areas in the needle."""
-        return len(self.areas)
+    def provideCurrentAreaLabel(self):
+        """Provide the current area label."""
+        return f"{self.areaPos}/{len(self.areas)}"
 
 
 #-----------------------------------------------------------------------------------------------
