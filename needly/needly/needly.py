@@ -24,7 +24,6 @@ import tkinter as tk
 import io
 import os
 import json
-import re
 import sys
 import libvirt
 from tkinter import ttk
@@ -318,7 +317,7 @@ class Application:
             path = filedialog.askopenfile().name
         except AttributeError:
             noimage = True
-        if noimage == False:
+        if not noimage:
             self.directory = os.path.split(path)[0]
             image = os.path.split(path)[1]
             if 'json' in image:
@@ -357,7 +356,7 @@ class Application:
             else:
                 messagebox.showerror("Error", "No images are loaded. Select an image first.")
                 noimage = True
-        if noimage == False:
+        if not noimage:
             self.pictureField.delete(self.rectangle)
             self.rectangle = None
             self.displayImage(self.returnPath(self.imageName))
@@ -376,7 +375,7 @@ class Application:
             else:
                 messagebox.showerror("Error", "No images are loaded. Select an image first.")
                 noimage = True
-        if noimage == False:
+        if not noimage:
             self.pictureField.delete(self.rectangle)
             self.rectangle = None
             self.displayImage(self.returnPath(self.imageName))
@@ -505,7 +504,7 @@ class Application:
         xpos = int(self.pictureField.canvasx(event.x))
         ypos = int(self.pictureField.canvasy(event.y))
         self.startPoint = [xpos, ypos]
-        if self.rectangle == None:
+        if self.rectangle is None:
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
 
     def redrawArea(self, event):
@@ -591,7 +590,7 @@ class Application:
 
     def loadNeedle(self, event=None):
         """Load the existing needle information from the file and display them in the window."""
-        if self.imageName != None:
+        if self.imageName is not None:
             jsonfile = self.returnPath(self.imageName).replace(".png", ".json")
             self.handler = fileHandler(jsonfile)
             self.handler.readFile()
@@ -609,7 +608,7 @@ class Application:
             areas = self.needle.provideAreaCount()
             self.needleEntry.delete(0, "end")
             self.needleEntry.insert(0, areas)
-            if self.rectangle != None:
+            if self.rectangle is not None:
                 self.pictureField.delete(self.rectangle)
                 self.rectangle = None
             self.showArea(None)
@@ -621,7 +620,7 @@ class Application:
         jsondata = self.needle.provideJson()
         filename = self.nameEntry.get().replace(".png", ".json")
         path = self.returnPath(filename)
-        if self.handler == None:
+        if self.handler is None:
             self.handler = fileHandler(path)
         self.handler.acceptData(jsondata)
         self.handler.writeFile(path)
@@ -713,7 +712,7 @@ class Application:
             # On a VM usually only one screen is available,
             # so we will take the first one and will not bother
             # about others.
-            image_type = domain.screenshot(stream, 0)
+            domain.screenshot(stream, 0)
             # The stream will be caught in an envelope
             image_data = io.BytesIO()
             # Now, let's take the data from the stream
@@ -836,9 +835,9 @@ class needleData:
         else:
             area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
 
-        if type(props) != list:
+        if not isinstance(props, list):
             props = [props]
-        if type(tags) != list:
+        if not isinstance(tags, list):
             tags = [tags]
         self.jsonData["properties"] = props
         self.jsonData["tags"] = tags
@@ -857,7 +856,7 @@ class needleData:
     def removeArea(self):
         """Remove the active area from the area list."""
         try:
-            deleted = self.areas.pop(self.areaPos-1)
+            self.areas.pop(self.areaPos-1)
             self.jsonData["area"] = self.areas
             self.areaPos -= 2
         except IndexError:
@@ -878,7 +877,7 @@ def main():
 
     app = Application()
 
-    if path != None:
+    if path is not None:
         app.acceptCliChoice(path)
 
     app.run()
