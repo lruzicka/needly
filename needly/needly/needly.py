@@ -415,22 +415,17 @@ class Application:
         """Load area and draw a rectangle around it."""
         self.area = self.needle.provideNextArea()
         try:
-            self.needleCoordinates = [self.area[0], self.area[1], self.area[2], self.area[3]]
-            typ = self.area[4]
-            # Some needles do not have matches defined, so we must be very careful with this.
-            try:
-                match = self.area[5]
-            except IndexError:
-                match = None
+            self.needleCoordinates = self.area.coordinates
 
             self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
             self.rectangles.append(self.rectangle)
             self.displayCoordinates(self.needleCoordinates)
             self.typeList.delete(0, "end")
-            self.typeList.insert("end", typ)
-            if match:
-                self.matchEntry.delete(0, "end")
-                self.matchEntry.insert("end", match)
+            self.typeList.insert("end", self.area.type)
+            # Some needles do not have matches defined, so we must be very careful with this.
+            self.matchEntry.delete(0, "end")
+            if self.area.match:
+                self.matchEntry.insert("end", self.area.match)
             self.updateCurrentAreaLabel()
         except TypeError:
             for r in self.rectangles:
@@ -478,12 +473,9 @@ class Application:
             tags = tags.split("\n")
         if tags == "":
             tags = []
-        # Do not force match onto needle json when not defined
-        if match:
-            coordinates = [xpos, ypos, apos, bpos, typ, match]
-        else:
-            coordinates = [xpos, ypos, apos, bpos, typ]
-        self.needle.update(coordinates, tags, props)
+        coordinates = [xpos, ypos, apos, bpos]
+        self.needle.update(coordinates, typ, match, tags, props)
+
         self.updateDebugJson()
         self.pictureField.coords(self.rectangle, self.needleCoordinates)
 
@@ -834,46 +826,30 @@ class needleData:
 
     def provideNextArea(self):
         """Provide information about the active area and move pointer to the next area for future reference."""
-        try:
-            area = self.areas[self.areaPos]
-            xpos = area["xpos"]
-            ypos = area["ypos"]
-            wide = area["width"]
-            high = area["height"]
-            typ = area["type"]
-            try:
-                match = area["match"]
-            except KeyError:
-                match = None
-            apos = xpos + wide
-            bpos = ypos + high
-            if match:
-                areaData = [xpos, ypos, apos, bpos, typ, match]
-            else:
-                areaData = [xpos, ypos, apos, bpos, typ]
-            self.areaPos += 1
-            return areaData
-        except IndexError:
-            messagebox.showerror("Error", "No more area in the needle.")
+        # Wrap around
+        if self.areaPos == len(self.areas):
+            self.areaPos = 0
 
-    def update(self, coordinates, tags, props):
+        area = self.areas[self.areaPos]
+        self.areaPos += 1
+        return areaData(area)
+
+    def update(self, coordinates, typ, match, tags, props):
         """Update all information taken from the GUI in the data variable."""
+        if not self.haveCurrentArea():
+            messagebox.showerror("Error", "Cannot modify non-existent area. Add area first!")
+            return
+
         xpos = coordinates[0]
         ypos = coordinates[1]
         apos = coordinates[2]
         bpos = coordinates[3]
-        typ = coordinates[4]
-        # Again, if no match is defined, the key is missing from the data.
-        try:
-            match = coordinates[5]
-        except IndexError:
-            match = None
         wide = int(apos) - int(xpos)
         high = int(bpos) - int(ypos)
+        area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
+        # Again, if no match is defined, the key is missing from the data.
         if match:
-            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ, "match":match}
-        else:
-            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
+            area["match"] = match
 
         if not isinstance(props, list):
             props = [props]
@@ -881,11 +857,7 @@ class needleData:
             tags = [tags]
         self.jsonData["properties"] = props
         self.jsonData["tags"] = tags
-
-        try:
-            self.areas[self.areaPos-1] = area
-        except IndexError:
-            messagebox.showerror("Error", "Cannot modify non-existent area. Add area first!")
+        self.areas[self.areaPos-1] = area
         self.jsonData["area"] = self.areas
 
     def addArea(self):
@@ -906,6 +878,45 @@ class needleData:
         """Provide the current area label."""
         return f"{self.areaPos}/{len(self.areas)}"
 
+    def haveCurrentArea(self):
+        """Get whether we have a current area."""
+        return self.areas and len(self.areas) > self.areaPos - 1
+
+
+class areaData:
+
+    xpos = -1
+    ypos = -1
+    width = -1
+    height = -1
+    coordinates = []
+    type = ""
+    match = None
+
+    def __init__(self, area):
+        self.xpos = area["xpos"]
+        self.ypos = area["ypos"]
+        self.width = area["width"]
+        self.height = area["height"]
+        self.coordinates = [self.xpos, self.ypos, self.xpos + self.width, self.ypos + self.height]
+        self.type = area["type"]
+
+        if "match" in area:
+            self.match = area["match"]
+
+    def toDict(self):
+        """Get area as dict for JSON output."""
+        out = {
+            "xpos": self.xpos,
+            "ypos": self.ypos,
+            "width": self.width,
+            "height": self.height,
+            "type": self.type,
+        }
+
+        if self.match:
+            out["match"] = self.match
+        return out
 
 #-----------------------------------------------------------------------------------------------
 
