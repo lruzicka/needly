@@ -117,13 +117,21 @@ class Application:
     def acceptCliChoice(self, path):
         """Opens an image for editing when passed as a CLI argument upon starting the editor."""
         self.directory = os.path.dirname(path)
-        image = os.path.basename(path)
+        filename = os.path.basename(path)
+        if filename.endswith('.json'):
+            chunks = filename.split('.')
+            self.imageName = '.'.join(chunks[:-1]) + '.png'
+        else:
+            self.imageName = filename
+        self.imageCount = 0
+
+        # Ensure the image is displayed before any areas are rendered
+        image_path = os.path.join(self.directory, self.imageName)
+        self.displayImage(image_path)
+
         # If a json file is opened, we assume that we want to load the needle automatically
         # and that the needle exists, there we will open and load the needle file.
-        if '.json' in image:
-            prefix = image.split('.')[0]
-            image = prefix + '.png'
-            self.imageName = image
+        if filename.endswith('.json'):
             self.loadNeedle()
         else:
             # If however, we start the application with the PNG file, the json needle file
@@ -132,7 +140,6 @@ class Application:
             # If the test fails, we will at least set the tag from the filename
             # to save users some time to type. Users can edit it, later and change the file name
             # from within the application.
-            self.imageName = image
             jfile = os.path.join(self.directory, self.imageName)
             # Let's replace the suffix and test if the file exists.
             pre = jfile.split('.')[0]
@@ -144,9 +151,6 @@ class Application:
                 # Or just prefill the tag field from the file name.
                 tag = self.imageName.split('.')[0]
                 self.textField.insert("end", tag)
-        self.imageCount = 0
-        path = os.path.join(self.directory, self.imageName)
-        self.displayImage(path)
 
     def buildWidgets(self):
         """Construct GUI"""
