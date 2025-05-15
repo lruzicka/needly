@@ -222,11 +222,11 @@ class Application:
         self.widthEntry = tk.Entry(self.coordFrame, width=5)
         self.widthEntry.grid(row=0, column=5, sticky="w")
 
-        self.heigthLabel = tk.Label(self.coordFrame, text="Area heigth:")
-        self.heigthLabel.grid(row=1, column=4, sticky="w")
+        self.heightLabel = tk.Label(areaFrame, text="Area height:")
+        self.heightLabel.grid(row=1, column=4, sticky="w")
 
-        self.heigthEntry = tk.Entry(self.coordFrame, width=5)
-        self.heigthEntry.grid(row=1, column=5, sticky="w")
+        self.heightEntry = tk.Entry(areaFrame, width=5)
+        self.heightEntry.grid(row=1, column=5, sticky="w")
 
         self.bxLable = tk.Label(self.coordFrame, text="X2:")
         self.bxLable.grid(row=1, column=0, sticky="w")
@@ -402,8 +402,8 @@ class Application:
     def calculateSize(self, coordinates):
         """Calculate size of the area from its coordinates."""
         width = int(coordinates[2]) - int(coordinates[0])
-        heigth = int(coordinates[3]) - int(coordinates[1])
-        return [width, heigth]
+        height = int(coordinates[3]) - int(coordinates[1])
+        return [width, height]
 
     def showArea(self, event=None):
         """Load area and draw a rectangle around it."""
@@ -443,8 +443,8 @@ class Application:
         size = self.calculateSize(coordinates)
         self.widthEntry.delete(0, "end")
         self.widthEntry.insert("end", size[0])
-        self.heigthEntry.delete(0, "end")
-        self.heigthEntry.insert("end", size[1])
+        self.heightEntry.delete(0, "end")
+        self.heightEntry.insert("end", size[1])
 
     def modifyArea(self, event=None):
         """Update the information for the active needle area, including properties, tags, etc."""
