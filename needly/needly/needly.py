@@ -656,6 +656,20 @@ class Application:
 
     def show_connect_VM(self, event=None):
         """ Show a dialogue to connect to a VM """
+        # Get the domain names from the kvm hypervisor
+        domains = []
+        try:
+            self.kvm = libvirt.open("qemu:///session")
+            # Get the names of all running domains in the hypervisor.
+            domains = [x.name() for x in self.kvm.listAllDomains()]
+        except libvirt.libvirtError:
+            messagebox.showerror("Error", "Failed to open connection to the hypervisor.")
+            return
+
+        if not domains:
+            messagebox.showerror("No domains found", "Either the hypervisor is not running or no VMs available in the qemu:///session.")
+            return
+
         # Create the basic GUI for the dialogue
         self.connect_dialogue = tk.Toplevel(self.toplevel)
         self.connect_dialogue.title('Connect to a VM')
@@ -667,20 +681,9 @@ class Application:
         choices = tk.StringVar()
         self.cd_choose_box = ttk.Combobox(self.cd_layout, textvariable=choices, height=3)
         self.cd_choose_box.grid(row=0, column=1)
+        self.cd_choose_box['values'] = domains
         self.cd_connect = tk.Button(self.cd_layout, text="Connect", width=10, command=self.connect)
         self.cd_connect.grid(row=1, column=1)
-
-        # Get the domain names from the kvm hypervisor
-        try:
-            self.kvm = libvirt.open("qemu:///session")
-            # Get the names of all running domains in the hypervisor.
-            domains = [x.name() for x in self.kvm.listAllDomains()]
-            if len(domains) == 0:
-                messagebox.showerror("No domains found", "Either the hypervisor is not running or no VMs available in the qemu:///session.")
-            self.cd_choose_box['values'] = domains
-        except libvirt.libvirtError:
-            messagebox.showerror("Error", "Failed to open connection to the hypervisor.")
-            self.cd_choose_box['values'] = []
 
     def connect(self, event=None):
         """ Update the status variable to let the application know about the VM. """
