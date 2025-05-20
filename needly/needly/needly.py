@@ -24,7 +24,6 @@ import tkinter as tk
 import io
 import os
 import json
-import re
 import sys
 import libvirt
 from tkinter import ttk
@@ -47,6 +46,7 @@ class Application:
         self.toplevel.bind("<Control-n>", self.nextImage)
         self.toplevel.bind("<Control-a>", self.addAreaToNeedle)
         self.toplevel.bind("<Control-r>", self.removeAreaFromNeedle)
+        self.toplevel.bind("<Control-i>", self.startClickPointSetting)
         self.toplevel.bind("<Control-p>", self.prevImage)
         self.toplevel.bind("<Control-l>", self.loadNeedle)
         self.toplevel.bind("<Control-s>", self.createNeedle)
@@ -55,6 +55,7 @@ class Application:
         self.toplevel.bind("<Control-x>", self.renameFile)
         self.toplevel.bind("<Control-b>", self.show_connect_VM)
         self.toplevel.bind("<Control-t>", self.takeScreenshot)
+        self.toplevel.bind("<Control-k>", self.showDebugJson)
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
         self.frame.grid()
@@ -62,18 +63,21 @@ class Application:
         self.frame.grid_columnconfigure(1, weight=0)
         self.frame.grid_rowconfigure(0, weight=1)
 
+        self.textJson = None # Widget for JSON output debugging
         self.buildWidgets()
         self.images = [] # List of images to be handled.
         self.needleCoordinates = [0, 0, 0, 0] # Coordinates of the needle area
         self.directory = "" # Active working directory
-        self.rectangle = None # The red frame around the area
+        self.areaRectangle = None # The red frame around the area
+        self.areaClickCircle = None # The green circle around a click area
         self.needle = needleData({"properties":[], "tags":[], "area":[]}) # The Needle object
+        self.area = None # The active needle area
         self.imageName = None # The name of the active image
         self.handler = None # The file reader and writer object
         self.imageCount = 0 # Counter for
-        self.rectangles = [] # Holder for rectangles
         self.kvm = None # Connection to KVM hypervisor
         self.virtual_machine = None # Holds the name of the connected virtual machine
+        self.recordingClickPoint = False # Whether in click point recording mode
 
     def create_menu(self):
         self.menu = tk.Menu(self.toplevel)
@@ -101,6 +105,7 @@ class Application:
         self.menu_area.add_command(label='Remove area', accelerator='Ctrl-R', command=self.removeAreaFromNeedle)
         self.menu_area.add_command(label='Go to next area', accelerator='Ctrl-G', command=self.showArea)
         self.menu_area.add_command(label='Modify area', accelerator='Ctrl-M', command=self.modifyArea)
+        self.menu_area.add_command(label='Set click point', accelerator='Ctrl-I', command=self.startClickPointSetting)
         # Define the VM submenu
         self.menu_vm = tk.Menu(self.menu)
         self.menu.add_cascade(menu=self.menu_vm, label='vMachine')
@@ -116,13 +121,21 @@ class Application:
     def acceptCliChoice(self, path):
         """Opens an image for editing when passed as a CLI argument upon starting the editor."""
         self.directory = os.path.dirname(path)
-        image = os.path.basename(path)
+        filename = os.path.basename(path)
+        if filename.endswith('.json'):
+            chunks = filename.split('.')
+            self.imageName = '.'.join(chunks[:-1]) + '.png'
+        else:
+            self.imageName = filename
+        self.imageCount = 0
+
+        # Ensure the image is displayed before any areas are rendered
+        imagePath = os.path.join(self.directory, self.imageName)
+        self.displayImage(imagePath)
+
         # If a json file is opened, we assume that we want to load the needle automatically
         # and that the needle exists, there we will open and load the needle file.
-        if '.json' in image:
-            prefix = image.split('.')[0]
-            image = prefix + '.png'
-            self.imageName = image
+        if filename.endswith('.json'):
             self.loadNeedle()
         else:
             # If however, we start the application with the PNG file, the json needle file
@@ -131,7 +144,6 @@ class Application:
             # If the test fails, we will at least set the tag from the filename
             # to save users some time to type. Users can edit it, later and change the file name
             # from within the application.
-            self.imageName = image
             jfile = os.path.join(self.directory, self.imageName)
             # Let's replace the suffix and test if the file exists.
             pre = jfile.split('.')[0]
@@ -143,9 +155,10 @@ class Application:
                 # Or just prefill the tag field from the file name.
                 tag = self.imageName.split('.')[0]
                 self.textField.insert("end", tag)
-        self.imageCount = 0
-        path = os.path.join(self.directory, self.imageName)
-        self.displayImage(path)
+
+        # Add a default area if creating new or opening needle with zero areas
+        if not self.needle.haveCurrentArea():
+            self.addAreaToNeedle()
 
     def buildWidgets(self):
         """Construct GUI"""
@@ -173,9 +186,9 @@ class Application:
         self.pictureField.grid_rowconfigure(0, weight=1)
         self.pictureField.config(scrollregion=self.pictureField.bbox('ALL'))
         # Bind picture specific keys
-        self.pictureField.bind("<Button 1>", self.startArea)
+        self.pictureField.bind("<Button 1>", self.mouseDown)
         self.pictureField.bind("<B1-Motion>", self.redrawArea)
-        self.pictureField.bind("<ButtonRelease-1>", self.endArea)
+        self.pictureField.bind("<ButtonRelease-1>", self.mouseUp)
         self.pictureField.bind("<Up>", self.resizeArea)
         self.pictureField.bind("<Down>", self.resizeArea)
         self.pictureField.bind("<Left>", self.resizeArea)
@@ -199,84 +212,94 @@ class Application:
         self.propText = tk.Text(self.jsonFrame, width=30, height=4)
         self.propText.grid(row=3, column=0, sticky="ew")
 
-        self.needleUL = tk.Label(self.jsonFrame, text="Area Coordinates:")
-        self.needleUL.grid(row=4, column=0, sticky="w")
+        areaFrame = tk.LabelFrame(self.jsonFrame, text="Area", padx=5, pady=5)
+        areaFrame.grid(row=4, column=0, sticky="ew")
 
-        self.coordFrame = tk.Frame(self.jsonFrame)
-        self.coordFrame.grid(row=5, column=0, sticky="ew")
+        self.needleUL = tk.Label(areaFrame, text="Coordinates:")
+        self.needleUL.grid(row=0, column=0, columnspan=2, sticky="w")
 
-        self.axLable = tk.Label(self.coordFrame, text="X1:")
-        self.axLable.grid(row=0, column=0, sticky="w")
+        self.axLabel = tk.Label(areaFrame, text="X1:")
+        self.axLabel.grid(row=1, column=0, sticky="w")
 
-        self.axEntry = tk.Entry(self.coordFrame, width=5)
-        self.axEntry.grid(row=0, column=1, sticky="w")
+        self.axEntry = tk.Entry(areaFrame, width=5)
+        self.axEntry.grid(row=1, column=1, sticky="w")
 
-        self.ayLable = tk.Label(self.coordFrame, text="Y1:")
-        self.ayLable.grid(row=0, column=2, sticky="w")
+        self.ayLabel = tk.Label(areaFrame, text="Y1:")
+        self.ayLabel.grid(row=1, column=2, sticky="w")
 
-        self.ayEntry = tk.Entry(self.coordFrame, width=5)
-        self.ayEntry.grid(row=0, column=3, sticky="w")
+        self.ayEntry = tk.Entry(areaFrame, width=5)
+        self.ayEntry.grid(row=1, column=3, sticky="w")
 
-        self.widthLabel = tk.Label(self.coordFrame, text="Area width:")
-        self.widthLabel.grid(row=0, column=4, sticky="w")
+        self.widthLabel = tk.Label(areaFrame, text="Width:")
+        self.widthLabel.grid(row=1, column=4, sticky="w")
 
-        self.widthEntry = tk.Entry(self.coordFrame, width=5)
-        self.widthEntry.grid(row=0, column=5, sticky="w")
+        self.widthEntry = tk.Entry(areaFrame, width=5)
+        self.widthEntry.grid(row=1, column=5, sticky="w")
+        self.widthEntry.config(state="readonly")
 
-        self.heigthLabel = tk.Label(self.coordFrame, text="Area heigth:")
-        self.heigthLabel.grid(row=1, column=4, sticky="w")
+        self.bxLabel = tk.Label(areaFrame, text="X2:")
+        self.bxLabel.grid(row=2, column=0, sticky="w")
 
-        self.heigthEntry = tk.Entry(self.coordFrame, width=5)
-        self.heigthEntry.grid(row=1, column=5, sticky="w")
+        self.bxEntry = tk.Entry(areaFrame, width=5)
+        self.bxEntry.grid(row=2, column=1, sticky="w")
 
-        self.bxLable = tk.Label(self.coordFrame, text="X2:")
-        self.bxLable.grid(row=1, column=0, sticky="w")
+        self.byLabel = tk.Label(areaFrame, text="Y2:")
+        self.byLabel.grid(row=2, column=2, sticky="w")
 
-        self.bxEntry = tk.Entry(self.coordFrame, width=5)
-        self.bxEntry.grid(row=1, column=1, sticky="w")
+        self.byEntry = tk.Entry(areaFrame, width=5)
+        self.byEntry.grid(row=2, column=3, sticky="w")
 
-        self.byLable = tk.Label(self.coordFrame, text="Y2:")
-        self.byLable.grid(row=1, column=2, sticky="w")
+        self.heightLabel = tk.Label(areaFrame, text="Height:")
+        self.heightLabel.grid(row=2, column=4, sticky="w")
 
-        self.byEntry = tk.Entry(self.coordFrame, width=5)
-        self.byEntry.grid(row=1, column=3, sticky="w")
+        self.heightEntry = tk.Entry(areaFrame, width=5)
+        self.heightEntry.grid(row=2, column=5, sticky="w")
+        self.heightEntry.config(state="readonly")
 
         self.listLabel = tk.Label(self.jsonFrame, text="Area type:")
         self.listLabel.grid(row=6, column=0, sticky="w")
+        self.listLabel = tk.Label(areaFrame, text="Type:")
+        self.listLabel.grid(row=3, column=0, columnspan=6, sticky="w")
 
-        self.typeList = tk.Spinbox(self.jsonFrame, values=["match","ocr","exclude"])
-        self.typeList.grid(row=7, column=0, sticky="ew")
+        self.typeList = tk.Spinbox(areaFrame, values=["match","ocr","exclude"])
+        self.typeList.grid(row=4, column=0, columnspan=6, sticky="ew")
 
-        self.matchLabel = tk.Label(self.jsonFrame, text="Match level:")
-        self.matchLabel.grid(row=8, column=0, sticky="w")
+        self.matchLabel = tk.Label(areaFrame, text="Match level:")
+        self.matchLabel.grid(row=5, column=0, columnspan=6, sticky="w")
 
-        self.matchEntry = tk.Entry(self.jsonFrame, width=30)
-        self.matchEntry.grid(row=9, column=0, sticky="ew")
+        self.matchEntry = tk.Entry(areaFrame, width=30)
+        self.matchEntry.grid(row=6, column=0, columnspan=6, sticky="ew")
+
+        pointLabel = tk.Label(areaFrame, text="Click point:")
+        pointLabel.grid(row=7, column=0, columnspan=6, sticky="w")
+
+        xLabel = tk.Label(areaFrame, text="X:")
+        xLabel.grid(row=8, column=0, sticky="w")
+
+        self.pointxEntry = tk.Entry(areaFrame, width=5)
+        self.pointxEntry.grid(row=8, column=1, sticky="w")
+
+        yLabel = tk.Label(areaFrame, text="Y:")
+        yLabel.grid(row=8, column=2, sticky="w")
+
+        self.pointyEntry = tk.Entry(areaFrame, width=5)
+        self.pointyEntry.grid(row=8, column=3, sticky="w")
+
+        self.areaFrame = areaFrame
 
         self.textLabel = tk.Label(self.jsonFrame, text="Tags:")
-        self.textLabel.grid(row=10, column=0, sticky="w")
+        self.textLabel.grid(row=5, column=0, sticky="w")
 
         self.textField = tk.Text(self.jsonFrame, width=30, height=3)
-        self.textField.grid(row=11, column=0, sticky="ew")
-
-        self.jsonLabel = tk.Label(self.jsonFrame, text="Json Data:")
-        self.jsonLabel.grid(row=12, column=0, sticky="w")
-
-        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
-        self.textJson.grid(row=13, column=0, sticky="ew")
-
-        self.needleLabel = tk.Label(self.jsonFrame, text="Areas in needle: ")
-        self.needleLabel.grid(row=14, column=0, sticky="w")
-
-        self.needleEntry = tk.Entry(self.jsonFrame, width=30)
-        self.needleEntry.grid(row=15, column=0, sticky="ew")
+        self.textField.grid(row=6, column=0, sticky="ew")
 
         self.vmLabel = tk.Label(self.jsonFrame, text="VM connection:")
-        self.vmLabel.grid(row=16, column=0, sticky="w")
+        self.vmLabel.grid(row=7, column=0, sticky="w")
 
         self.vmEntry = tk.Entry(self.jsonFrame, width=30)
-        self.vmEntry.grid(row=17, column=0, sticky="ew")
+        self.vmEntry.grid(row=8, column=0, sticky="ew")
         self.vmEntry.insert("end","Not connected")
+        self.vmEntry.config(state="readonly")
 
 
     def wrapopen(self): # These functions serve as wrappers for key bindings that were not able to invoke
@@ -318,7 +341,7 @@ class Application:
             path = filedialog.askopenfile().name
         except AttributeError:
             noimage = True
-        if noimage == False:
+        if not noimage:
             self.directory = os.path.split(path)[0]
             image = os.path.split(path)[1]
             if 'json' in image:
@@ -357,9 +380,9 @@ class Application:
             else:
                 messagebox.showerror("Error", "No images are loaded. Select an image first.")
                 noimage = True
-        if noimage == False:
-            self.pictureField.delete(self.rectangle)
-            self.rectangle = None
+        if not noimage:
+            self.pictureField.delete(self.areaRectangle)
+            self.areaRectangle = None
             self.displayImage(self.returnPath(self.imageName))
 
     def prevImage(self, event=None):
@@ -376,9 +399,9 @@ class Application:
             else:
                 messagebox.showerror("Error", "No images are loaded. Select an image first.")
                 noimage = True
-        if noimage == False:
-            self.pictureField.delete(self.rectangle)
-            self.rectangle = None
+        if not noimage:
+            self.pictureField.delete(self.areaRectangle)
+            self.areaRectangle = None
             self.displayImage(self.returnPath(self.imageName))
         else:
             pass
@@ -403,33 +426,45 @@ class Application:
     def calculateSize(self, coordinates):
         """Calculate size of the area from its coordinates."""
         width = int(coordinates[2]) - int(coordinates[0])
-        heigth = int(coordinates[3]) - int(coordinates[1])
-        return [width, heigth]
+        height = int(coordinates[3]) - int(coordinates[1])
+        return [width, height]
 
     def showArea(self, event=None):
         """Load area and draw a rectangle around it."""
+        self.clearAreaRender()
         self.area = self.needle.provideNextArea()
         try:
-            self.needleCoordinates = [self.area[0], self.area[1], self.area[2], self.area[3]]
-            typ = self.area[4]
-            # Some needles do not have matches defined, so we must be very careful with this.
-            try:
-                match = self.area[5]
-            except IndexError:
-                match = None
+            self.needleCoordinates = self.area.coordinates
 
-            self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
-            self.rectangles.append(self.rectangle)
+            self.areaRectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
             self.displayCoordinates(self.needleCoordinates)
             self.typeList.delete(0, "end")
-            self.typeList.insert("end", typ)
-            if match:
-                self.matchEntry.delete(0, "end")
-                self.matchEntry.insert("end", match)
-        except TypeError:
-            for r in self.rectangles:
-                self.pictureField.delete(r)
+            self.typeList.insert("end", self.area.type)
+            # Some needles do not have matches defined, so we must be very careful with this.
+            self.matchEntry.delete(0, "end")
+            if self.area.match:
+                self.matchEntry.insert("end", self.area.match)
 
+            self.pointxEntry.delete(0, "end")
+            self.pointyEntry.delete(0, "end")
+            if self.area.haveClickPoint():
+                self.areaClickCircle = self.drawClickPoint(self.area)
+                self.pointxEntry.insert("end", self.area.clickPointX)
+                self.pointyEntry.insert("end", self.area.clickPointY)
+
+            self.updateCurrentAreaLabel()
+            self.stopClickPointSetting()
+        except TypeError as e:
+            print(f"Unexpected error displaying needle area: {e}")
+
+    def clearAreaRender(self):
+        """Clear rendering of current area and reset tracking variables."""
+        if self.areaRectangle:
+            self.pictureField.delete(self.areaRectangle)
+            self.areaRectangle = None
+        if self.areaClickCircle:
+            self.pictureField.delete(self.areaClickCircle)
+            self.areaClickCircle = None
 
     def displayCoordinates(self, coordinates):
         """Disply coordinates in the GUI"""
@@ -442,20 +477,43 @@ class Application:
         self.byEntry.delete(0, "end")
         self.byEntry.insert("end", coordinates[3])
         size = self.calculateSize(coordinates)
+
+        self.widthEntry.config(state="normal")
         self.widthEntry.delete(0, "end")
         self.widthEntry.insert("end", size[0])
-        self.heigthEntry.delete(0, "end")
-        self.heigthEntry.insert("end", size[1])
+        self.widthEntry.config(state="readonly")
+
+        self.heightEntry.config(state="normal")
+        self.heightEntry.delete(0, "end")
+        self.heightEntry.insert("end", size[1])
+        self.heightEntry.config(state="readonly")
 
     def modifyArea(self, event=None):
         """Update the information for the active needle area, including properties, tags, etc."""
+        if not self.needle.haveCurrentArea():
+            messagebox.showerror("Error", "You have found a bug and don't have a current area. Add an area first!")
+            return
+
         self.getCoordinates()
-        xpos = self.needleCoordinates[0]
-        ypos = self.needleCoordinates[1]
-        apos = self.needleCoordinates[2]
-        bpos = self.needleCoordinates[3]
-        typ = self.typeList.get()
-        match = self.matchEntry.get()
+        coordsChanged = self.area.updateCoordinates(self.needleCoordinates)
+
+        self.area.type = self.typeList.get()
+        self.area.match = self.matchEntry.get()
+
+        if coordsChanged:
+            # Clear click point when moving area.
+            self.clearClickPoint()
+        else:
+            try:
+                pt_x = int(self.pointxEntry.get())
+                pt_y = int(self.pointyEntry.get())
+            except ValueError:
+                self.area.clickPointX = None
+                self.area.clickPointY = None
+            else:
+                self.area.clickPointX = pt_x
+                self.area.clickPointY = pt_y
+
         props = self.propText.get("1.0", "end-1c")
         if "\n" in props:
             props = props.split("\n")
@@ -466,55 +524,121 @@ class Application:
             tags = tags.split("\n")
         if tags == "":
             tags = []
-        # Do not force match onto needle json when not defined
-        if match:
-            coordinates = [xpos, ypos, apos, bpos, typ, match]
+
+        self.needle.update(self.area, tags, props)
+
+        self.updateDebugJson()
+        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
+
+    def drawClickPoint(self, area):
+        """Draw and return area click point."""
+        x = area.xpos + area.clickPointX
+        y = area.ypos + area.clickPointY
+        minx = x - 5
+        maxx = x + 5
+        miny = y - 5
+        maxy = y + 5
+        return self.pictureField.create_oval([minx, miny, maxx, maxy], outline="chartreuse2", width=2)
+
+    def startClickPointSetting(self, event=None):
+        """Start click point setting mode."""
+        self.recordingClickPoint = True
+        self.pointxEntry.config(bg="chartreuse2")
+        self.pointyEntry.config(bg="chartreuse2")
+        if self.areaClickCircle:
+            self.pictureField.delete(self.areaClickCircle)
+            self.areaClickCircle = None
+
+    def stopClickPointSetting(self):
+        """Stop click point setting mode."""
+        if self.recordingClickPoint:
+            self.recordingClickPoint = False
+            self.pointxEntry.config(bg="white")
+            self.pointyEntry.config(bg="white")
+
+    def recordClickPoint(self, event):
+        """Record click point to area."""
+        x = int(self.pictureField.canvasx(event.x))
+        y = int(self.pictureField.canvasy(event.y))
+        (area_x, area_y) = self.needle.updateClickPoint(x, y)
+        if area_x is not None:
+            self.pointxEntry.delete(0, "end")
+            self.pointxEntry.insert("end", area_x)
+            self.pointyEntry.delete(0, "end")
+            self.pointyEntry.insert("end", area_y)
+            self.area.clickPointX = area_x
+            self.area.clickPointY = area_y
+            if self.areaClickCircle:
+                self.pictureField.delete(self.areaClickCircle)
+            self.areaClickCircle = self.drawClickPoint(self.area)
         else:
-            coordinates = [xpos, ypos, apos, bpos, typ]
-        self.needle.update(coordinates, tags, props)
-        self.textJson.delete("1.0", "end")
-        json = self.needle.provideJson()
-        self.textJson.insert("end", json)
-        self.pictureField.coords(self.rectangle, self.needleCoordinates)
+            messagebox.showerror("Error", "Point outside area.")
+        self.stopClickPointSetting()
+
+    def clearClickPoint(self):
+        """Clear click point from UI, sidebar and current area."""
+        if not self.needle.haveCurrentArea():
+            return
+        self.area.clickPointX = None
+        self.area.clickPointY = None
+        self.pointxEntry.delete(0, "end")
+        self.pointyEntry.delete(0, "end")
+        if self.areaClickCircle:
+            self.pictureField.delete(self.areaClickCircle)
+            self.areaClickCircle = None
 
     def addAreaToNeedle(self, event=None):
         """Add new area to needle. The needle can have more areas."""
-        self.needle.addArea()
-        self.modifyArea(None)
-        areas = self.needle.provideAreaCount()
-        self.needleEntry.delete(0, "end")
-        self.needleEntry.insert("end", areas)
+        newArea = areaData.getNew(*self.picsize)
+        if self.needle.haveCurrentArea():
+            self.modifyArea()
+        self.needle.addArea(newArea.toDict())
+        self.showArea()
 
+    def updateCurrentAreaLabel(self):
+        """Update current area to area frame."""
+        position = self.needle.provideCurrentAreaLabel()
+        self.areaFrame["text"] = f"Area {position}"
 
     def removeAreaFromNeedle(self, event=None):
         """Remove the active area from the needle (deletes it)."""
         self.needle.removeArea()
-        areas = self.needle.provideAreaCount()
-        coordinates = [0, 0, 0, 0]
-        self.displayCoordinates(coordinates)
-        self.needleEntry.delete(0, "end")
-        self.needleEntry.insert("end", areas)
-        json = self.needle.provideJson()
-        self.textJson.delete("1.0", "end")
-        self.textJson.insert("end", json)
-        self.pictureField.delete(self.rectangle)
+        if not self.needle.haveCurrentArea():
+            self.addAreaToNeedle()
+        self.updateDebugJson()
         self.showArea(None)
+
+    def mouseDown(self, event):
+        """Handle mouse down event."""
+        if not self.recordingClickPoint:
+            self.startArea(event)
+
+    def mouseUp(self, event):
+        """Handle mouse up event."""
+        if self.recordingClickPoint:
+            self.recordClickPoint(event)
+        else:
+            self.endArea(event)
 
     def startArea(self, event):
         """Get coordinates on mouse click and start drawing the rectangle from this point."""
         xpos = int(self.pictureField.canvasx(event.x))
         ypos = int(self.pictureField.canvasy(event.y))
         self.startPoint = [xpos, ypos]
-        if self.rectangle == None:
-            self.rectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
+        # Clear any click point immediately
+        self.clearClickPoint()
+        if not self.areaRectangle:
+            self.areaRectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
 
     def redrawArea(self, event):
         """Upon mouse drag update the size of the rectangle as the mouse is moving."""
+        if self.recordingClickPoint:
+            return
         apos = int(self.pictureField.canvasx(event.x))
         bpos = int(self.pictureField.canvasy(event.y))
         self.endPoint = [apos, bpos]
         self.needleCoordinates = self.startPoint + self.endPoint
-        self.pictureField.coords(self.rectangle, self.needleCoordinates)
+        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
 
     def endArea(self, event):
         """Stop drawing the rectangle and record the coordinates to match the final size."""
@@ -546,6 +670,7 @@ class Application:
             coordinates[2] = xpos
             coordinates[3] = bpos
         self.displayCoordinates(coordinates)
+        self.modifyArea()
 
     def resizeArea(self, event):
         self.getCoordinates()
@@ -585,33 +710,27 @@ class Application:
             self.needleCoordinates[y] = self.needleCoordinates[y] + step
 
         self.displayCoordinates(self.needleCoordinates)
-        self.pictureField.coords(self.rectangle, self.needleCoordinates)
-
-
+        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
+        self.modifyArea()
 
     def loadNeedle(self, event=None):
         """Load the existing needle information from the file and display them in the window."""
-        if self.imageName != None:
+        if self.imageName is not None:
             jsonfile = self.returnPath(self.imageName).replace(".png", ".json")
             self.handler = fileHandler(jsonfile)
-            self.handler.readFile()
+            if not self.handler.readFile():
+                return
             jsondata = self.handler.provideData()
             self.needle = needleData(jsondata)
+            self.clearAreaRender()
             properties = self.needle.provideProperties()
             self.propText.delete("1.0", "end")
             self.propText.insert("end", properties)
             tags = self.needle.provideTags()
             self.textField.delete("1.0", "end")
             self.textField.insert("end", tags)
-            json = self.needle.provideJson()
-            self.textJson.delete("1.0", "end")
-            self.textJson.insert("end", json)
-            areas = self.needle.provideAreaCount()
-            self.needleEntry.delete(0, "end")
-            self.needleEntry.insert(0, areas)
-            if self.rectangle != None:
-                self.pictureField.delete(self.rectangle)
-                self.rectangle = None
+            self.updateDebugJson()
+            self.updateCurrentAreaLabel()
             self.showArea(None)
         else:
             messagebox.showerror("Error", "No images are loaded. Select image directory first.")
@@ -621,12 +740,10 @@ class Application:
         jsondata = self.needle.provideJson()
         filename = self.nameEntry.get().replace(".png", ".json")
         path = self.returnPath(filename)
-        if self.handler == None:
+        if self.handler is None:
             self.handler = fileHandler(path)
         self.handler.acceptData(jsondata)
         self.handler.writeFile(path)
-        self.pictureField.delete(self.rectangle)
-        self.rectangle = None
 
     def renameFile(self, event=None):
         """ Rename the needle PNG file with the top placed tag. """
@@ -657,6 +774,20 @@ class Application:
 
     def show_connect_VM(self, event=None):
         """ Show a dialogue to connect to a VM """
+        # Get the domain names from the kvm hypervisor
+        domains = []
+        try:
+            self.kvm = libvirt.open("qemu:///session")
+            # Get the names of all running domains in the hypervisor.
+            domains = [x.name() for x in self.kvm.listAllDomains()]
+        except libvirt.libvirtError:
+            messagebox.showerror("Error", "Failed to open connection to the hypervisor.")
+            return
+
+        if not domains:
+            messagebox.showerror("No domains found", "Either the hypervisor is not running or no VMs available in the qemu:///session.")
+            return
+
         # Create the basic GUI for the dialogue
         self.connect_dialogue = tk.Toplevel(self.toplevel)
         self.connect_dialogue.title('Connect to a VM')
@@ -668,20 +799,9 @@ class Application:
         choices = tk.StringVar()
         self.cd_choose_box = ttk.Combobox(self.cd_layout, textvariable=choices, height=3)
         self.cd_choose_box.grid(row=0, column=1)
+        self.cd_choose_box['values'] = domains
         self.cd_connect = tk.Button(self.cd_layout, text="Connect", width=10, command=self.connect)
         self.cd_connect.grid(row=1, column=1)
-
-        # Get the domain names from the kvm hypervisor
-        try:
-            self.kvm = libvirt.open("qemu:///session")
-            # Get the names of all running domains in the hypervisor.
-            domains = [x.name() for x in self.kvm.listAllDomains()]
-            if len(domains) == 0:
-                messagebox.showerror("No domains found", "Either the hypervisor is not running or no VMs available in the qemu:///session.")
-            self.cd_choose_box['values'] = domains
-        except libvirt.libvirtError:
-            messagebox.showerror("Error", "Failed to open connection to the hypervisor.")
-            self.cd_choose_box['values'] = []
 
     def connect(self, event=None):
         """ Update the status variable to let the application know about the VM. """
@@ -690,8 +810,10 @@ class Application:
             messagebox.showerror("No VM selected", "Please, select one of the available VMs.")
         self.virtual_machine = selected
         self.connect_dialogue.destroy()
+        self.vmEntry.config(state="normal")
         self.vmEntry.delete("0", "end")
         self.vmEntry.insert("end", self.virtual_machine)
+        self.vmEntry.config(state="readonly")
 
 
     def takeScreenshot(self, event=None):
@@ -713,7 +835,7 @@ class Application:
             # On a VM usually only one screen is available,
             # so we will take the first one and will not bother
             # about others.
-            image_type = domain.screenshot(stream, 0)
+            domain.screenshot(stream, 0)
             # The stream will be caught in an envelope
             image_data = io.BytesIO()
             # Now, let's take the data from the stream
@@ -733,6 +855,31 @@ class Application:
             self.textField.delete("1.0", "end")
             self.textField.insert("end", self.imageName)
 
+    def showDebugJson(self, event):
+        """Show the JSON output widget for debugging."""
+        if self.textJson:
+            return
+
+        self.jsonLabel = tk.Label(self.jsonFrame, text="JSON Data:")
+        self.jsonLabel.grid(row=9, column=0, sticky="w")
+
+        self.textJson = tk.Text(self.jsonFrame, width=30, height=8)
+        self.textJson.grid(row=10, column=0, sticky="ew")
+        self.textJson.config(state="disabled")
+
+        self.updateDebugJson()
+
+    def updateDebugJson(self):
+        """If the JSON output widget is shown update its contents."""
+        if not self.textJson:
+            return
+
+        self.textJson.config(state="normal")
+        self.textJson.delete("1.0", "end")
+        json = self.needle.provideJson()
+        self.textJson.insert("end", json)
+        self.textJson.config(state="disabled")
+
 #-----------------------------------------------------------------------------------------------
 
 class fileHandler:
@@ -744,14 +891,19 @@ class fileHandler:
 
     def readFile(self):
         """Read the json file and create the data variable with the info."""
+        success = False
         try:
             with open(self.jsonfile, "r") as inFile:
                 self.jsonData = json.load(inFile)
+                success = True
         except FileNotFoundError:
             if self.jsonfile != "empty":
                 messagebox.showerror("Error", "No needle exists. Create one.")
             else:
                 messagebox.showerror("Error", "No images are loaded. Select image directory.")
+        except json.JSONDecodeError as e:
+            messagebox.showerror("Error", f"Failed to load JSON.\n\n{e}")
+        return success
 
     def writeFile(self, jsonfile):
         """Take the data variable and write is out as a json file."""
@@ -795,78 +947,166 @@ class needleData:
 
     def provideNextArea(self):
         """Provide information about the active area and move pointer to the next area for future reference."""
-        try:
-            area = self.areas[self.areaPos]
-            xpos = area["xpos"]
-            ypos = area["ypos"]
-            wide = area["width"]
-            high = area["height"]
-            typ = area["type"]
-            try:
-                match = area["match"]
-            except KeyError:
-                match = None
-            apos = xpos + wide
-            bpos = ypos + high
-            if match:
-                areaData = [xpos, ypos, apos, bpos, typ, match]
-            else:
-                areaData = [xpos, ypos, apos, bpos, typ]
-            self.areaPos += 1
-            return areaData
-        except IndexError:
-            messagebox.showerror("Error", "No more area in the needle.")
+        # Wrap around
+        if self.areaPos == len(self.areas):
+            self.areaPos = 0
 
-    def update(self, coordinates, tags, props):
+        area = self.areas[self.areaPos]
+        self.areaPos += 1
+        return areaData(area)
+
+    def update(self, area, tags, props):
         """Update all information taken from the GUI in the data variable."""
-        xpos = coordinates[0]
-        ypos = coordinates[1]
-        apos = coordinates[2]
-        bpos = coordinates[3]
-        typ = coordinates[4]
-        # Again, if no match is defined, the key is missing from the data.
-        try:
-            match = coordinates[5]
-        except IndexError:
-            match = None
-        wide = int(apos) - int(xpos)
-        high = int(bpos) - int(ypos)
-        if match:
-            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ, "match":match}
+        if self.haveCurrentArea():
+            self.areas[self.areaPos-1] = area.toDict()
+            self.jsonData["area"] = self.areas
         else:
-            area = {"xpos":xpos, "ypos":ypos, "width":wide, "height":high, "type":typ}
+            messagebox.showerror("Error", "Cannot modify non-existent area. Add an area first!")
 
-        if type(props) != list:
+        if not isinstance(props, list):
             props = [props]
-        if type(tags) != list:
+        if not isinstance(tags, list):
             tags = [tags]
         self.jsonData["properties"] = props
         self.jsonData["tags"] = tags
 
-        try:
-            self.areas[self.areaPos-1] = area
-        except IndexError:
-            messagebox.showerror("Error", "Cannot modify non-existent area. Add area first!")
-        self.jsonData["area"] = self.areas
 
-    def addArea(self):
+    def updateClickPoint(self, x, y):
+        """Update click point for current needle area."""
+        if len(self.areas) < self.areaPos-1:
+            print("Invalid area?")
+            return (None, None)
+        area = self.areas[self.areaPos-1]
+
+        xmin = area["xpos"]
+        xmax = xmin + area["width"]
+        ymin = area["ypos"]
+        ymax = ymin + area["height"]
+
+        if xmin <= x <= xmax and ymin <= y <= ymax:
+            area_x = x - xmin
+            area_y = y - ymin
+            area["click_point"] = {"xpos":area_x, "ypos":area_y}
+            self.areas[self.areaPos-1] = area
+            self.jsonData["area"] = self.areas
+            return (area_x, area_y)
+        else:
+            return (None, None)
+
+    def addArea(self, area):
         """Add new area to the needle (at the end of the list)."""
-        self.areas.append("newarea")
-        self.areaPos = len(self.areas)
+        self.areas.append(area)
+        self.areaPos = len(self.areas) - 1
 
     def removeArea(self):
         """Remove the active area from the area list."""
         try:
-            deleted = self.areas.pop(self.areaPos-1)
+            self.areas.pop(self.areaPos-1)
             self.jsonData["area"] = self.areas
-            self.areaPos -= 2
+            self.areaPos -= 1
         except IndexError:
             messagebox.showerror("Error", "No area in the needle. Not deleting anything.")
 
-    def provideAreaCount(self):
-        """Provide the number of the areas in the needle."""
-        return len(self.areas)
+    def provideCurrentAreaLabel(self):
+        """Provide the current area label."""
+        return f"{self.areaPos}/{len(self.areas)}"
 
+    def haveCurrentArea(self):
+        """Get whether we have a current area."""
+        return self.areas and len(self.areas) > self.areaPos - 1
+
+
+class areaData:
+
+    xpos = -1
+    ypos = -1
+    width = -1
+    height = -1
+    coordinates = []
+    type = ""
+    match = None
+    clickPointX = ""
+    clickPointY = ""
+
+    def __init__(self, area):
+        self.xpos = area["xpos"]
+        self.ypos = area["ypos"]
+        self.width = area["width"]
+        self.height = area["height"]
+        self.coordinates = [self.xpos, self.ypos, self.xpos + self.width, self.ypos + self.height]
+        self.type = area["type"]
+
+        if "match" in area:
+            self.match = area["match"]
+        if "click_point" in area:
+            pt = area["click_point"]
+            if "xpos" in pt and "ypos" in pt:
+                self.clickPointX = pt["xpos"]
+                self.clickPointY = pt["ypos"]
+
+    def haveClickPoint(self):
+        """Get whether the area has a click point."""
+        return self.clickPointX and self.clickPointY
+
+    def toDict(self):
+        """Get area as dict for JSON output."""
+        out = {
+            "xpos": self.xpos,
+            "ypos": self.ypos,
+            "width": self.width,
+            "height": self.height,
+            "type": self.type,
+        }
+
+        if self.match:
+            out["match"] = self.match
+        if self.haveClickPoint():
+            out["click_point"] = {
+                "xpos": self.clickPointX,
+                "ypos": self.clickPointY,
+            }
+        return out
+
+    def updateCoordinates(self, coordsArray):
+        """Update coordinates, returning whether changes were made."""
+        assert len(coordsArray) == 4
+        updated = False
+
+        xpos = coordsArray[0]
+        if self.xpos != xpos:
+            self.xpos = xpos
+            updated = True
+        ypos = coordsArray[1]
+        if self.ypos != ypos:
+            self.ypos = ypos
+            updated = True
+
+        apos = coordsArray[2]
+        bpos = coordsArray[3]
+        width = int(apos) - int(self.xpos)
+        if self.width != width:
+            self.width = width
+            updated = True
+        height = int(bpos) - int(self.ypos)
+        if self.height != height:
+            self.height = height
+            updated = True
+        return updated
+
+    @staticmethod
+    def getNew(image_width, image_height):
+        """Create a new area in the middle of the image."""
+        width = int(image_width/10)
+        height = int(image_height/10)
+        x = int(image_width/2 - width/2)
+        y = int(image_height/2 - height/2)
+        return areaData({
+            "xpos": x,
+            "ypos": y,
+            "width": width,
+            "height": height,
+            "type": "match",
+        })
 
 #-----------------------------------------------------------------------------------------------
 
@@ -878,7 +1118,7 @@ def main():
 
     app = Application()
 
-    if path != None:
+    if path is not None:
         app.acceptCliChoice(path)
 
     app.run()
