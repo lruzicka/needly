@@ -48,7 +48,6 @@ class Application:
         self.toplevel.bind("<Control-r>", self.removeAreaFromNeedle)
         self.toplevel.bind("<Control-i>", self.startClickPointSetting)
         self.toplevel.bind("<Control-p>", self.prevImage)
-        self.toplevel.bind("<Control-l>", self.loadNeedle)
         self.toplevel.bind("<Control-s>", self.createNeedle)
         self.toplevel.bind("<Control-o>", self.selectFile)
         self.toplevel.bind("<Control-q>", self.wrapQuit)
@@ -74,7 +73,7 @@ class Application:
         self.area = None # The active needle area
         self.imageName = None # The name of the active image
         self.handler = None # The file reader and writer object
-        self.imageCount = 0 # Counter for
+        self.imageIndex = 0 # Index of current image
         self.kvm = None # Connection to KVM hypervisor
         self.virtualMachine = None # Holds the name of the connected virtual machine
         self.recordingClickPoint = False # Whether in click point recording mode
@@ -82,16 +81,11 @@ class Application:
     def createMenu(self):
         self.menu = tk.Menu(self.toplevel)
         # Define the File submenu
-        # Define the Needle submenu
-        self.menu_needle = tk.Menu(self.menu)
-        self.menu.add_cascade(menu=self.menu_needle, label='Needle')
-        self.menu_needle.add_command(label='Load', accelerator='Ctrl-L', command=self.loadNeedle)
-        self.menu_needle.add_command(label='Save', accelerator='Ctrl-S', command=self.createNeedle)
-
         self.menuFile = tk.Menu(self.menu)
         self.menu.add_cascade(menu=self.menuFile, label='File')
         self.menuFile.add_command(label='Open file', accelerator='Ctrl-O', command=self.selectFile)
         self.menuFile.add_command(label='Open directory', accelerator='Ctrl-D', command=self.readImages)
+        self.menuFile.add_command(label='Save', accelerator='Ctrl-S', command=self.createNeedle)
         self.menuFile.add_separator()
         self.menuFile.add_command(label='Load next', accelerator='Ctrl-N', command=self.nextImage)
         self.menuFile.add_command(label='Load previous', accelerator='Ctrl-P', command=self.prevImage)
@@ -120,45 +114,55 @@ class Application:
 
     def acceptCliChoice(self, path):
         """Opens an image for editing when passed as a CLI argument upon starting the editor."""
-        self.directory = os.path.dirname(path)
-        filename = os.path.basename(path)
-        if filename.endswith('.json'):
-            chunks = filename.split('.')
-            self.imageName = '.'.join(chunks[:-1]) + '.png'
-        else:
-            self.imageName = filename
-        self.imageCount = 0
+        if self.loadImageAndNeedle(path):
+            self.images = [self.imageName]
+            self.imageIndex = 0
 
+    def loadImageAndNeedle(self, filePath):
+        """Load and display both a image an its associated needle data.
+
+        If no JSON file exists new needle data is created and a default area shown.
+
+        :param str filePath: The path to either the PNG or JSON
+        :return: Whether the image was successfully loaded
+        :rtype: bool
+        """
+        self.directory = os.path.dirname(filePath)
+        filename = os.path.basename(filePath)
+        root, extension = os.path.splitext(filePath)
+        if extension.lower() == ".png":
+            imagePath = filePath
+        elif extension.lower() == ".json":
+            imagePath = f"{root}.png"
+        else:
+            messagebox.showerror("Error", "File needs to be a PNG or JSON")
+            return False
+
+        if not os.path.exists(imagePath):
+            messagebox.showerror("Error", f"Image not found: {imagePath}")
+            return False
+
+        self.imageName = filename
         # Ensure the image is displayed before any areas are rendered
-        imagePath = os.path.join(self.directory, self.imageName)
         self.displayImage(imagePath)
 
-        # If a json file is opened, we assume that we want to load the needle automatically
-        # and that the needle exists, there we will open and load the needle file.
-        if filename.endswith('.json'):
-            self.loadNeedle()
-        else:
-            # If however, we start the application with the PNG file, the json needle file
-            # might not exist, therefore we need to perform a test first, before we try to load
-            # it.
-            # If the test fails, we will at least set the tag from the filename
-            # to save users some time to type. Users can edit it, later and change the file name
-            # from within the application.
-            jfile = os.path.join(self.directory, self.imageName)
-            # Let's replace the suffix and test if the file exists.
-            pre = jfile.split('.')[0]
-            exists = os.path.exists(f"{pre}.json")
-            # Load the needle if it exists
-            if exists:
-                self.loadNeedle()
-            else:
-                # Or just prefill the tag field from the file name.
-                tag = self.imageName.split('.')[0]
-                self.textField.insert("end", tag)
+        jsonFilename = f"{root}.json"
 
-        # Add a default area if creating new or opening needle with zero areas
+        # If a JSON file exists load it, otherwise reset state
+        if os.path.exists(jsonFilename):
+            self.loadNeedle(jsonFilename)
+        else:
+            self.needle = needleData({"properties":[], "tags":[], "area":[]})
+            # Prefill the tag field from the file name.
+            tag, _ = os.path.splitext(filename)
+            self.textField.delete("1.0", "end")
+            self.textField.insert("end", tag)
+
+        # Add a default area if creating new or opening needle with no areas
         if not self.needle.haveCurrentArea():
             self.addAreaToNeedle()
+
+        return True
 
     def buildWidgets(self):
         """Construct GUI"""
@@ -312,41 +316,33 @@ class Application:
     def readImages(self, event=None):
         """Read PNG images from the given directory and create a list of their names."""
         self.directory = filedialog.askdirectory()
+        if not self.directory:
+            print("No directory selected?")
+            return
+
         print(self.directory)
-        if self.directory:
-            for file in os.listdir(self.directory):
-                if file.endswith(".png"):
-                    self.images.append(file)
+        self.images = []
+        for file in os.listdir(self.directory):
+            if file.lower().endswith(".png"):
+                self.images.append(file)
+
+        if not self.images:
+            messagebox.showerror("Error", "Found no images the selected directory.")
         else:
-            pass
-        if len(self.images) == 1:
-            messagebox.showinfo("Found images", "Found 1 image in the selected directory.")
-        else:
-            messagebox.showinfo("Found images", "Found {} images in the selected directory.".format(len(self.images)))
-        self.imageCount = 0
-        try:
-            self.imageName = self.images[0]
-            self.displayImage(self.returnPath(self.imageName))
-        except IndexError:
-            pass
+            if len(self.images) == 1:
+                messagebox.showinfo("Found images", "Found 1 image in the selected directory.")
+            else:
+                messagebox.showinfo("Found images", f"Found {len(self.images)} images in the selected directory.")
+
+            if self.loadImageAndNeedle(self.returnPath(self.images[0])):
+                self.imageIndex = 0
 
     def selectFile(self, event=None):
         """Reads in an image file and shows it for editing."""
-        noimage = False
-        try:
-            path = filedialog.askopenfile().name
-        except AttributeError:
-            noimage = True
-        if not noimage:
-            self.directory = os.path.split(path)[0]
-            image = os.path.split(path)[1]
-            if 'json' in image:
-                prefix = image.split('.')[0]
-                image = prefix + '.png'
-            self.imageName = image
-            self.imageCount = 0
-            path = os.path.join(self.directory, image)
-            self.displayImage(path)
+        openFile = filedialog.askopenfile()
+        if openFile and self.loadImageAndNeedle(openFile.name):
+            self.images = [self.imageName]
+            self.imageIndex = 0
 
     def displayImage(self, path):
         """Display image on the canvas."""
@@ -364,43 +360,29 @@ class Application:
 
     def nextImage(self, event=None):
         """Display next image on the list."""
-        self.imageCount += 1
-        try:
-            self.imageName = self.images[self.imageCount]
-            noimage = False
-        except IndexError:
-            if len(self.images) != 0:
-                self.imageName = self.images[0]
-                self.imageCount = 0
-                noimage = False
-            else:
-                messagebox.showerror("Error", "No images are loaded. Select an image first.")
-                noimage = True
-        if not noimage:
-            self.pictureField.delete(self.areaRectangle)
-            self.areaRectangle = None
-            self.displayImage(self.returnPath(self.imageName))
+        if not self.images:
+            messagebox.showerror("Error", "No images are loaded. Select an image first.")
+            return
+
+        self.imageIndex += 1
+        if self.imageIndex >= len(self.images):
+            self.imageIndex = 0
+
+        imageName = self.images[self.imageIndex]
+        self.loadImageAndNeedle(self.returnPath(imageName))
 
     def prevImage(self, event=None):
         """Display previous image on the list."""
-        self.imageCount -= 1
-        try:
-            self.imageName = self.images[self.imageCount]
-            noimage = False
-        except IndexError:
-            if len(self.images) != 0:
-                self.imageName = self.images[-1]
-                self.imageCount = len(self.images)
-                noimage = False
-            else:
-                messagebox.showerror("Error", "No images are loaded. Select an image first.")
-                noimage = True
-        if not noimage:
-            self.pictureField.delete(self.areaRectangle)
-            self.areaRectangle = None
-            self.displayImage(self.returnPath(self.imageName))
-        else:
-            pass
+        if not self.images:
+            messagebox.showerror("Error", "No images are loaded. Select an image first.")
+            return
+
+        self.imageIndex -= 1
+        if self.imageIndex < 0:
+            self.imageIndex = len(self.images) - 1
+
+        imageName = self.images[self.imageIndex]
+        self.loadImageAndNeedle(self.returnPath(imageName))
 
     def getCoordinates(self):
         """Read coordinates from the coordinate windows."""
@@ -709,32 +691,29 @@ class Application:
         self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
         self.modifyArea()
 
-    def loadNeedle(self, event=None):
+    def loadNeedle(self, jsonFile):
         """Load the existing needle information from the file and display them in the window."""
-        if self.imageName is not None:
-            jsonfile = self.returnPath(self.imageName).replace(".png", ".json")
-            self.handler = fileHandler(jsonfile)
-            if not self.handler.readFile():
-                return
-            jsondata = self.handler.provideData()
-            self.needle = needleData(jsondata)
-            self.clearAreaRender()
-            properties = self.needle.provideProperties()
-            self.propText.delete("1.0", "end")
-            self.propText.insert("end", properties)
-            tags = self.needle.provideTags()
-            self.textField.delete("1.0", "end")
-            self.textField.insert("end", tags)
-            self.updateDebugJson()
-            self.updateCurrentAreaLabel()
-            self.showArea(None)
-        else:
-            messagebox.showerror("Error", "No images are loaded. Select image directory first.")
+        self.handler = fileHandler(jsonFile)
+        if not self.handler.readFile():
+            return
+        jsonData = self.handler.provideData()
+        self.needle = needleData(jsonData)
+        self.clearAreaRender()
+        properties = self.needle.provideProperties()
+        self.propText.delete("1.0", "end")
+        self.propText.insert("end", properties)
+        tags = self.needle.provideTags()
+        self.textField.delete("1.0", "end")
+        self.textField.insert("end", tags)
+        self.updateDebugJson()
+        self.updateCurrentAreaLabel()
+        self.showArea()
 
     def createNeedle(self, event=None):
         """Write out the json file for the actual image to store the needle permanently."""
         jsonData = self.needle.provideJson()
-        filename = self.nameEntry.get().replace(".png", ".json")
+        basename, _ = os.path.splitext(self.nameEntry.get())
+        filename = f"{basename}.json"
         path = self.returnPath(filename)
         if self.handler is None:
             self.handler = fileHandler(path)
@@ -840,16 +819,16 @@ class Application:
                 imageData.write(part_stream)
                 part_stream = stream.recv(8192)
             # Convert and save the image
-            image_data.seek(0)
-            image = Image.open(image_data)
-            image.save("screenshot.png", 'PNG')
-            image_data.close()
-            stream.finish()
-            path = os.path.join(os.path.abspath('.'), 'screenshot.png')
+            imageData.seek(0)
+            image = Image.open(imageData)
             self.imageName = "screenshot.png"
-            self.displayImage(path)
-            self.textField.delete("1.0", "end")
-            self.textField.insert("end", self.imageName)
+            image.save(self.imageName, 'PNG')
+            imageData.close()
+            stream.finish()
+            path = os.path.join(os.path.abspath('.'), self.imageName)
+            if self.loadImageAndNeedle(path):
+                self.images = [self.imageName]
+                self.imageIndex = 0
 
     def showDebugJson(self, event):
         """Show the JSON output widget for debugging."""
