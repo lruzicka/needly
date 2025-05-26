@@ -38,9 +38,9 @@ class Application:
         self.toplevel.minsize(1024, 860)
         self.toplevel.grid_columnconfigure(0, weight=1)
         self.toplevel.grid_rowconfigure(0, weight=1)
-        self.create_menu()
+        self.createMenu()
         # Map keys to the application
-        self.toplevel.bind("<Control-d>", self.readimages)
+        self.toplevel.bind("<Control-d>", self.readImages)
         self.toplevel.bind("<Control-m>", self.modifyArea)
         self.toplevel.bind("<Control-g>", self.showArea)
         self.toplevel.bind("<Control-n>", self.nextImage)
@@ -50,10 +50,10 @@ class Application:
         self.toplevel.bind("<Control-p>", self.prevImage)
         self.toplevel.bind("<Control-l>", self.loadNeedle)
         self.toplevel.bind("<Control-s>", self.createNeedle)
-        self.toplevel.bind("<Control-o>", self.selectfile)
-        self.toplevel.bind("<Control-q>", self.wrapquit)
+        self.toplevel.bind("<Control-o>", self.selectFile)
+        self.toplevel.bind("<Control-q>", self.wrapQuit)
         self.toplevel.bind("<Control-x>", self.renameFile)
-        self.toplevel.bind("<Control-b>", self.show_connect_VM)
+        self.toplevel.bind("<Control-b>", self.showConnectVM)
         self.toplevel.bind("<Control-t>", self.takeScreenshot)
         self.toplevel.bind("<Control-k>", self.showDebugJson)
         # Initiate the main frame of the application.
@@ -76,41 +76,41 @@ class Application:
         self.handler = None # The file reader and writer object
         self.imageCount = 0 # Counter for
         self.kvm = None # Connection to KVM hypervisor
-        self.virtual_machine = None # Holds the name of the connected virtual machine
+        self.virtualMachine = None # Holds the name of the connected virtual machine
         self.recordingClickPoint = False # Whether in click point recording mode
 
-    def create_menu(self):
+    def createMenu(self):
         self.menu = tk.Menu(self.toplevel)
         # Define the File submenu
-        self.menu_file = tk.Menu(self.menu)
-        self.menu.add_cascade(menu=self.menu_file, label='File')
-        self.menu_file.add_command(label='Open file', accelerator='Ctrl-O', command=self.selectfile)
-        self.menu_file.add_command(label='Open directory', accelerator='Ctrl-D', command=self.readimages)
-        self.menu_file.add_separator()
-        self.menu_file.add_command(label='Load next', accelerator='Ctrl-N', command=self.nextImage)
-        self.menu_file.add_command(label='Load previous', accelerator='Ctrl-P', command=self.prevImage)
-        self.menu_file.add_command(label='Set name from tag', accelerator='Ctrl-X', command=self.renameFile)
-        self.menu_file.add_separator()
-        self.menu_file.add_command(label='Quit', accelerator='Ctrl-Q', command=self.wrapquit)
         # Define the Needle submenu
         self.menu_needle = tk.Menu(self.menu)
         self.menu.add_cascade(menu=self.menu_needle, label='Needle')
         self.menu_needle.add_command(label='Load', accelerator='Ctrl-L', command=self.loadNeedle)
         self.menu_needle.add_command(label='Save', accelerator='Ctrl-S', command=self.createNeedle)
 
+        self.menuFile = tk.Menu(self.menu)
+        self.menu.add_cascade(menu=self.menuFile, label='File')
+        self.menuFile.add_command(label='Open file', accelerator='Ctrl-O', command=self.selectFile)
+        self.menuFile.add_command(label='Open directory', accelerator='Ctrl-D', command=self.readImages)
+        self.menuFile.add_separator()
+        self.menuFile.add_command(label='Load next', accelerator='Ctrl-N', command=self.nextImage)
+        self.menuFile.add_command(label='Load previous', accelerator='Ctrl-P', command=self.prevImage)
+        self.menuFile.add_command(label='Set name from tag', accelerator='Ctrl-X', command=self.renameFile)
+        self.menuFile.add_separator()
+        self.menuFile.add_command(label='Quit', accelerator='Ctrl-Q', command=self.wrapQuit)
         # Define the Area submenu
-        self.menu_area = tk.Menu(self.menu)
-        self.menu.add_cascade(menu=self.menu_area, label='Area')
-        self.menu_area.add_command(label='Add area', accelerator='Ctrl-A', command=self.addAreaToNeedle)
-        self.menu_area.add_command(label='Remove area', accelerator='Ctrl-R', command=self.removeAreaFromNeedle)
-        self.menu_area.add_command(label='Go to next area', accelerator='Ctrl-G', command=self.showArea)
-        self.menu_area.add_command(label='Modify area', accelerator='Ctrl-M', command=self.modifyArea)
-        self.menu_area.add_command(label='Set click point', accelerator='Ctrl-I', command=self.startClickPointSetting)
+        self.menuArea = tk.Menu(self.menu)
+        self.menu.add_cascade(menu=self.menuArea, label='Area')
+        self.menuArea.add_command(label='Add area', accelerator='Ctrl-A', command=self.addAreaToNeedle)
+        self.menuArea.add_command(label='Remove area', accelerator='Ctrl-R', command=self.removeAreaFromNeedle)
+        self.menuArea.add_command(label='Go to next area', accelerator='Ctrl-G', command=self.showArea)
+        self.menuArea.add_command(label='Modify area', accelerator='Ctrl-M', command=self.modifyArea)
+        self.menuArea.add_command(label='Set click point', accelerator='Ctrl-I', command=self.startClickPointSetting)
         # Define the VM submenu
-        self.menu_vm = tk.Menu(self.menu)
-        self.menu.add_cascade(menu=self.menu_vm, label='vMachine')
-        self.menu_vm.add_command(label='Connect VM', accelerator='Ctrl-B', command=self.show_connect_VM)
-        self.menu_vm.add_command(label='Take screenshot', accelerator='Ctrl-T', command=self.takeScreenshot)
+        self.menuVm = tk.Menu(self.menu)
+        self.menu.add_cascade(menu=self.menuVm, label='vMachine')
+        self.menuVm.add_command(label='Connect VM', accelerator='Ctrl-B', command=self.showConnectVM)
+        self.menuVm.add_command(label='Take screenshot', accelerator='Ctrl-T', command=self.takeScreenshot)
         # Register the menu in the top level widget.
         self.toplevel['menu'] = self.menu
 
@@ -301,20 +301,16 @@ class Application:
         self.vmEntry.insert("end","Not connected")
         self.vmEntry.config(state="readonly")
 
-
-    def wrapopen(self): # These functions serve as wrappers for key bindings that were not able to invoke
-        self.selectfile()
-
-    def wrapquit(self, event=None):
+    # This serves as a wrapper for key bindings that were not able to invoke
+    def wrapQuit(self, event=None):
         self.frame.quit()
 
     def returnPath(self, image):
         """Create a full path from working directory and image name."""
         return os.path.join(self.directory, image)
 
-    def readimages(self, event=None):
-        """Read png images from the given directory and create a list of their names."""
-        self.images = []
+    def readImages(self, event=None):
+        """Read PNG images from the given directory and create a list of their names."""
         self.directory = filedialog.askdirectory()
         print(self.directory)
         if self.directory:
@@ -334,7 +330,7 @@ class Application:
         except IndexError:
             pass
 
-    def selectfile(self, event=None):
+    def selectFile(self, event=None):
         """Reads in an image file and shows it for editing."""
         noimage = False
         try:
@@ -560,14 +556,14 @@ class Application:
         """Record click point to area."""
         x = int(self.pictureField.canvasx(event.x))
         y = int(self.pictureField.canvasy(event.y))
-        (area_x, area_y) = self.needle.updateClickPoint(x, y)
-        if area_x is not None:
+        areaX, areaY = self.needle.updateClickPoint(x, y)
+        if areaX is not None:
             self.pointxEntry.delete(0, "end")
-            self.pointxEntry.insert("end", area_x)
+            self.pointxEntry.insert("end", areaX)
             self.pointyEntry.delete(0, "end")
-            self.pointyEntry.insert("end", area_y)
-            self.area.clickPointX = area_x
-            self.area.clickPointY = area_y
+            self.pointyEntry.insert("end", areaY)
+            self.area.clickPointX = areaX
+            self.area.clickPointY = areaY
             if self.areaClickCircle:
                 self.pictureField.delete(self.areaClickCircle)
             self.areaClickCircle = self.drawClickPoint(self.area)
@@ -606,7 +602,7 @@ class Application:
         if not self.needle.haveCurrentArea():
             self.addAreaToNeedle()
         self.updateDebugJson()
-        self.showArea(None)
+        self.showArea()
 
     def mouseDown(self, event):
         """Handle mouse down event."""
@@ -737,12 +733,12 @@ class Application:
 
     def createNeedle(self, event=None):
         """Write out the json file for the actual image to store the needle permanently."""
-        jsondata = self.needle.provideJson()
+        jsonData = self.needle.provideJson()
         filename = self.nameEntry.get().replace(".png", ".json")
         path = self.returnPath(filename)
         if self.handler is None:
             self.handler = fileHandler(path)
-        self.handler.acceptData(jsondata)
+        self.handler.acceptData(jsonData)
         self.handler.writeFile(path)
 
     def renameFile(self, event=None):
@@ -772,7 +768,7 @@ class Application:
         elif not self.imageName:
             messagebox.showerror("Error", "No image loaded. Load an image first!")
 
-    def show_connect_VM(self, event=None):
+    def showConnectVM(self, event=None):
         """ Show a dialogue to connect to a VM """
         # Get the domain names from the kvm hypervisor
         domains = []
@@ -789,30 +785,30 @@ class Application:
             return
 
         # Create the basic GUI for the dialogue
-        self.connect_dialogue = tk.Toplevel(self.toplevel)
-        self.connect_dialogue.title('Connect to a VM')
-        self.cd_layout = tk.Frame(self.connect_dialogue)
-        self.cd_layout.grid()
-        self.cd_label = tk.Label(self.cd_layout, text='Choose a VM:', padx=10, pady=5)
-        self.cd_label.grid(row=0, column=0)
-        self.connect_dialogue.bind("<Return>", self.connect)
+        self.connectDialogue = tk.Toplevel(self.toplevel)
+        self.connectDialogue.title('Connect to a VM')
+        self.cdLayout = tk.Frame(self.connectDialogue)
+        self.cdLayout.grid()
+        self.cdLabel = tk.Label(self.cdLayout, text='Choose a VM:', padx=10, pady=5)
+        self.cdLabel.grid(row=0, column=0)
+        self.connectDialogue.bind("<Return>", self.connect)
         choices = tk.StringVar()
-        self.cd_choose_box = ttk.Combobox(self.cd_layout, textvariable=choices, height=3)
-        self.cd_choose_box.grid(row=0, column=1)
-        self.cd_choose_box['values'] = domains
-        self.cd_connect = tk.Button(self.cd_layout, text="Connect", width=10, command=self.connect)
-        self.cd_connect.grid(row=1, column=1)
+        self.cdChooseBox = ttk.Combobox(self.cdLayout, textvariable=choices, height=3)
+        self.cdChooseBox.grid(row=0, column=1)
+        self.cdChooseBox['values'] = domains
+        self.cdConnect = tk.Button(self.cdLayout, text="Connect", width=10, command=self.connect)
+        self.cdConnect.grid(row=1, column=1)
 
     def connect(self, event=None):
         """ Update the status variable to let the application know about the VM. """
-        selected = self.cd_choose_box.get()
+        selected = self.cdChooseBox.get()
         if not selected:
             messagebox.showerror("No VM selected", "Please, select one of the available VMs.")
-        self.virtual_machine = selected
-        self.connect_dialogue.destroy()
+        self.virtualMachine = selected
+        self.connectDialogue.destroy()
         self.vmEntry.config(state="normal")
         self.vmEntry.delete("0", "end")
-        self.vmEntry.insert("end", self.virtual_machine)
+        self.vmEntry.insert("end", self.virtualMachine)
         self.vmEntry.config(state="readonly")
 
 
@@ -822,12 +818,12 @@ class Application:
         it. """
         # When no VM has been previously selected, there is no need
         # to try and take screenshots.
-        if not self.virtual_machine:
+        if not self.virtualMachine:
             messagebox.showerror("No VM connected", "Connect a VM before you try taking screenshots from it. Use the CTRL-V key shortcut.")
         # We have the running domain connected, so let's take the shot.
         else:
             # Use the domain name to get the domain object
-            domain = self.virtual_machine
+            domain = self.virtualMachine
             domain = self.kvm.lookupByName(domain)
             # Create a stream to the hypervisor
             stream = self.kvm.newStream()
@@ -837,11 +833,11 @@ class Application:
             # about others.
             domain.screenshot(stream, 0)
             # The stream will be caught in an envelope
-            image_data = io.BytesIO()
+            imageData = io.BytesIO()
             # Now, let's take the data from the stream
             part_stream = stream.recv(8192)
             while part_stream != b'':
-                image_data.write(part_stream)
+                imageData.write(part_stream)
                 part_stream = stream.recv(8192)
             # Convert and save the image
             image_data.seek(0)
@@ -883,21 +879,21 @@ class Application:
 #-----------------------------------------------------------------------------------------------
 
 class fileHandler:
-    def __init__(self, jsonfile):
+    def __init__(self, jsonFile):
         self.jsonData = {"properties": [],
                          "tags": [],
                          "area": []}
-        self.jsonfile = jsonfile
+        self.jsonFile = jsonFile
 
     def readFile(self):
         """Read the json file and create the data variable with the info."""
         success = False
         try:
-            with open(self.jsonfile, "r") as inFile:
+            with open(self.jsonFile, "r") as inFile:
                 self.jsonData = json.load(inFile)
                 success = True
         except FileNotFoundError:
-            if self.jsonfile != "empty":
+            if self.jsonFile != "empty":
                 messagebox.showerror("Error", "No needle exists. Create one.")
             else:
                 messagebox.showerror("Error", "No images are loaded. Select image directory.")
@@ -905,9 +901,9 @@ class fileHandler:
             messagebox.showerror("Error", f"Failed to load JSON.\n\n{e}")
         return success
 
-    def writeFile(self, jsonfile):
+    def writeFile(self, jsonFile):
         """Take the data variable and write is out as a json file."""
-        with open(jsonfile, "w") as outFile:
+        with open(jsonFile, "w") as outFile:
             json.dump(self.jsonData, outFile, indent=2)
         messagebox.showinfo("Info", "The needle has been written out.")
 
@@ -915,13 +911,13 @@ class fileHandler:
         """Provide the json file."""
         return self.jsonData
 
-    def acceptData(self, jsondata):
+    def acceptData(self, jsonData):
         """Update the data in data variable."""
-        self.jsonData = jsondata
+        self.jsonData = jsonData
 
 class needleData:
-    def __init__(self, jsondata):
-        self.jsonData = jsondata
+    def __init__(self, jsonData):
+        self.jsonData = jsonData
         self.areas = self.jsonData["area"]
         self.areaPos = 0
 
@@ -984,12 +980,12 @@ class needleData:
         ymax = ymin + area["height"]
 
         if xmin <= x <= xmax and ymin <= y <= ymax:
-            area_x = x - xmin
-            area_y = y - ymin
-            area["click_point"] = {"xpos":area_x, "ypos":area_y}
+            areaX = x - xmin
+            areaY = y - ymin
+            area["click_point"] = {"xpos":areaX, "ypos":areaY}
             self.areas[self.areaPos-1] = area
             self.jsonData["area"] = self.areas
-            return (area_x, area_y)
+            return (areaX, areaY)
         else:
             return (None, None)
 
@@ -1094,12 +1090,12 @@ class areaData:
         return updated
 
     @staticmethod
-    def getNew(image_width, image_height):
+    def getNew(imageWidth, imageHeight):
         """Create a new area in the middle of the image."""
-        width = int(image_width/10)
-        height = int(image_height/10)
-        x = int(image_width/2 - width/2)
-        y = int(image_height/2 - height/2)
+        width = int(imageWidth/10)
+        height = int(imageHeight/10)
+        x = int(imageWidth/2 - width/2)
+        y = int(imageHeight/2 - height/2)
         return areaData({
             "xpos": x,
             "ypos": y,
