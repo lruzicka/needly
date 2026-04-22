@@ -28,13 +28,14 @@ import sys
 import libvirt
 from tkinter import ttk
 from tkinter import filedialog, messagebox
-from PIL import Image
+from PIL import Image, ImageTk
+from needly import __version__
 
 class Application:
     """ Hold the GUI frames and widgets, as well as the handling in the GUI. """
     def __init__(self):
         self.toplevel = tk.Tk()
-        self.toplevel.title("Python Needle Editor for openQA (version 2.5.93)")
+        self.toplevel.title(f"Python Needle Editor for openQA (version {__version__})")
         self.toplevel.minsize(1024, 860)
         self.toplevel.grid_columnconfigure(0, weight=1)
         self.toplevel.grid_rowconfigure(0, weight=1)
@@ -55,6 +56,9 @@ class Application:
         self.toplevel.bind("<Control-b>", self.showConnectVM)
         self.toplevel.bind("<Control-t>", self.takeScreenshot)
         self.toplevel.bind("<Control-k>", self.showDebugJson)
+        self.toplevel.bind("<Control-equal>", self.zoomIn)
+        self.toplevel.bind("<Control-minus>", self.zoomOut)
+        self.toplevel.bind("<Control-0>", self.resetZoom)
         # Initiate the main frame of the application.
         self.frame = tk.Frame(self.toplevel)
         self.frame.grid()
@@ -63,6 +67,11 @@ class Application:
         self.frame.grid_rowconfigure(0, weight=1)
 
         self.textJson = None # Widget for JSON output debugging
+        # Zoom / HiDPI scaling
+        self.zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0]
+        self.scale = 1.0
+        self.currentImagePath = None # Path of currently displayed image (for re-rendering on zoom)
+        self._autoDetectScale()
         self.buildWidgets()
         self.images = [] # List of images to be handled.
         self.needleCoordinates = [0, 0, 0, 0] # Coordinates of the needle area
@@ -100,6 +109,12 @@ class Application:
         self.menuArea.add_command(label='Go to next area', accelerator='Ctrl-G', command=self.showArea)
         self.menuArea.add_command(label='Modify area', accelerator='Ctrl-M', command=self.modifyArea)
         self.menuArea.add_command(label='Set click point', accelerator='Ctrl-I', command=self.startClickPointSetting)
+        # Define the View submenu
+        self.menuView = tk.Menu(self.menu)
+        self.menu.add_cascade(menu=self.menuView, label='View')
+        self.menuView.add_command(label='Zoom in', accelerator='Ctrl-=', command=self.zoomIn)
+        self.menuView.add_command(label='Zoom out', accelerator='Ctrl--', command=self.zoomOut)
+        self.menuView.add_command(label='Reset zoom', accelerator='Ctrl-0', command=self.resetZoom)
         # Define the VM submenu
         self.menuVm = tk.Menu(self.menu)
         self.menu.add_cascade(menu=self.menuVm, label='vMachine')
@@ -107,6 +122,66 @@ class Application:
         self.menuVm.add_command(label='Take screenshot', accelerator='Ctrl-T', command=self.takeScreenshot)
         # Register the menu in the top level widget.
         self.toplevel['menu'] = self.menu
+
+    def _autoDetectScale(self):
+        """Auto-detect a suitable scale factor based on screen resolution."""
+        self.toplevel.update_idletasks()
+        screen_w = self.toplevel.winfo_screenwidth()
+        if screen_w >= 3840:
+            self.scale = 2.0
+        elif screen_w >= 2560:
+            self.scale = 1.5
+        else:
+            self.scale = 1.0
+        self._updateTitle()
+
+    def _updateTitle(self):
+        """Update window title to include current zoom level."""
+        zoom_pct = int(self.scale * 100)
+        self.toplevel.title(f"Python Needle Editor for openQA (version {__version__}) \u2014 {zoom_pct}%")
+
+    def zoomIn(self, event=None):
+        """Increase zoom level to the next step."""
+        for level in self.zoomLevels:
+            if level > self.scale:
+                self.scale = level
+                self.refreshDisplay()
+                return
+        # Already at max zoom
+
+    def zoomOut(self, event=None):
+        """Decrease zoom level to the previous step."""
+        for level in reversed(self.zoomLevels):
+            if level < self.scale:
+                self.scale = level
+                self.refreshDisplay()
+                return
+        # Already at min zoom
+
+    def resetZoom(self, event=None):
+        """Reset zoom to 1x (100%)."""
+        self.scale = 1.0
+        self.refreshDisplay()
+
+    def refreshDisplay(self):
+        """Re-render the current image and areas at the current scale."""
+        self._updateTitle()
+        if self.currentImagePath:
+            self.displayImage(self.currentImagePath)
+            # Re-draw the current area if one exists.
+            # Back up the area pointer so showArea re-displays the same area
+            # instead of advancing to the next one.
+            if self.needle.haveCurrentArea() and self.area:
+                self.needle.areaPos = max(0, self.needle.areaPos - 1)
+                self.showArea()
+
+    def toDisplayCoords(self, coords):
+        """Convert image coordinates to display (scaled) coordinates."""
+        return [int(c * self.scale) for c in coords]
+
+    def toImageCoords(self, coords):
+        """Convert display (scaled) coordinates to image coordinates."""
+        return [int(c / self.scale) for c in coords]
 
     def run(self):
         """ Starts the mainloop of the application. """
@@ -345,13 +420,20 @@ class Application:
             self.imageIndex = 0
 
     def displayImage(self, path):
-        """Display image on the canvas."""
+        """Display image on the canvas, scaled by the current zoom factor."""
+        self.currentImagePath = path
         self.picture = Image.open(path)
-        self.picsize = (self.picture.width,self.picture.height)
-        scrollregion = f"0 0 {self.picsize[0]} {self.picsize[1]}"
-        self.pictureField.config(width=self.picsize[0], height=self.picsize[1], xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set, scrollregion=scrollregion)
-        self.image = tk.PhotoImage(file=path)
-        self.background = self.pictureField.create_image((1, 1), image=self.image, anchor='nw')
+        self.picsize = (self.picture.width, self.picture.height)
+        # Compute scaled dimensions for display
+        scaled_w = int(self.picsize[0] * self.scale)
+        scaled_h = int(self.picsize[1] * self.scale)
+        scrollregion = f"0 0 {scaled_w} {scaled_h}"
+        self.pictureField.config(width=scaled_w, height=scaled_h, xscrollcommand=self.xscroll.set, yscrollcommand=self.yscroll.set, scrollregion=scrollregion)
+        # Resize using NEAREST to preserve sharp pixel boundaries
+        scaled_image = self.picture.resize((scaled_w, scaled_h), Image.NEAREST)
+        self.image = ImageTk.PhotoImage(scaled_image)
+        self.pictureField.delete("all")
+        self.background = self.pictureField.create_image((0, 0), image=self.image, anchor='nw')
         self.nameEntry.config(state="normal")
         self.nameEntry.delete(0, "end")
         self.nameEntry.insert("end", self.imageName)
@@ -413,8 +495,9 @@ class Application:
         self.area = self.needle.provideNextArea()
         try:
             self.needleCoordinates = self.area.coordinates
-
-            self.areaRectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
+            lineWidth = max(1, int(2 * self.scale))
+            displayCoords = self.toDisplayCoords(self.needleCoordinates)
+            self.areaRectangle = self.pictureField.create_rectangle(displayCoords, outline="red", width=lineWidth)
             self.displayCoordinates(self.needleCoordinates)
             self.typeList.delete(0, "end")
             self.typeList.insert("end", self.area.type)
@@ -506,17 +589,17 @@ class Application:
         self.needle.update(self.area, tags, props)
 
         self.updateDebugJson()
-        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
+        self.pictureField.coords(self.areaRectangle, self.toDisplayCoords(self.needleCoordinates))
 
     def drawClickPoint(self, area):
         """Draw and return area click point."""
+        # Compute position in image coords, then convert to display coords
         x = area.xpos + area.clickPointX
         y = area.ypos + area.clickPointY
-        minx = x - 5
-        maxx = x + 5
-        miny = y - 5
-        maxy = y + 5
-        return self.pictureField.create_oval([minx, miny, maxx, maxy], outline="chartreuse2", width=2)
+        dx, dy = self.toDisplayCoords([x, y])
+        radius = max(3, int(5 * self.scale))
+        lineWidth = max(1, int(2 * self.scale))
+        return self.pictureField.create_oval([dx - radius, dy - radius, dx + radius, dy + radius], outline="chartreuse2", width=lineWidth)
 
     def startClickPointSetting(self, event=None):
         """Start click point setting mode."""
@@ -536,8 +619,9 @@ class Application:
 
     def recordClickPoint(self, event):
         """Record click point to area."""
-        x = int(self.pictureField.canvasx(event.x))
-        y = int(self.pictureField.canvasy(event.y))
+        # Convert display (canvas) coordinates to image coordinates
+        x = int(self.pictureField.canvasx(event.x) / self.scale)
+        y = int(self.pictureField.canvasy(event.y) / self.scale)
         areaX, areaY = self.needle.updateClickPoint(x, y)
         if areaX is not None:
             self.pointxEntry.delete(0, "end")
@@ -600,23 +684,26 @@ class Application:
 
     def startArea(self, event):
         """Get coordinates on mouse click and start drawing the rectangle from this point."""
-        xpos = int(self.pictureField.canvasx(event.x))
-        ypos = int(self.pictureField.canvasy(event.y))
+        # Convert display (canvas) coordinates to image coordinates
+        xpos = int(self.pictureField.canvasx(event.x) / self.scale)
+        ypos = int(self.pictureField.canvasy(event.y) / self.scale)
         self.startPoint = [xpos, ypos]
         # Clear any click point immediately
         self.clearClickPoint()
         if not self.areaRectangle:
-            self.areaRectangle = self.pictureField.create_rectangle(self.needleCoordinates, outline="red", width=2)
+            lineWidth = max(1, int(2 * self.scale))
+            self.areaRectangle = self.pictureField.create_rectangle(self.toDisplayCoords(self.needleCoordinates), outline="red", width=lineWidth)
 
     def redrawArea(self, event):
         """Upon mouse drag update the size of the rectangle as the mouse is moving."""
         if self.recordingClickPoint:
             return
-        apos = int(self.pictureField.canvasx(event.x))
-        bpos = int(self.pictureField.canvasy(event.y))
+        # Convert display (canvas) coordinates to image coordinates
+        apos = int(self.pictureField.canvasx(event.x) / self.scale)
+        bpos = int(self.pictureField.canvasy(event.y) / self.scale)
         self.endPoint = [apos, bpos]
         self.needleCoordinates = self.startPoint + self.endPoint
-        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
+        self.pictureField.coords(self.areaRectangle, self.toDisplayCoords(self.needleCoordinates))
 
     def endArea(self, event):
         """Stop drawing the rectangle and record the coordinates to match the final size."""
@@ -688,7 +775,7 @@ class Application:
             self.needleCoordinates[y] = self.needleCoordinates[y] + step
 
         self.displayCoordinates(self.needleCoordinates)
-        self.pictureField.coords(self.areaRectangle, self.needleCoordinates)
+        self.pictureField.coords(self.areaRectangle, self.toDisplayCoords(self.needleCoordinates))
         self.modifyArea()
 
     def loadNeedle(self, jsonFile):
